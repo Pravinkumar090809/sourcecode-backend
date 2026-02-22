@@ -5,10 +5,16 @@ import crypto from "crypto";
 /**
  * Create a Cashfree payment order
  */
-export const createCashfreeOrder = async ({ orderId, amount, customerEmail, customerPhone, customerName, returnUrl }) => {
+export const createCashfreeOrder = async ({ 
+  orderId, 
+  amount, 
+  customerEmail, 
+  customerPhone, 
+  customerName 
+}) => {
   const requestBody = {
     order_id: orderId,
-    order_amount: amount,
+    order_amount: parseFloat(amount),
     order_currency: "INR",
     customer_details: {
       customer_id: customerEmail.replace(/[^a-zA-Z0-9]/g, "_"),
@@ -17,9 +23,12 @@ export const createCashfreeOrder = async ({ orderId, amount, customerEmail, cust
       customer_name: customerName || "Customer",
     },
     order_meta: {
-      return_url: returnUrl || `${process.env.FRONTEND_URL || 'https://frontend-one-cyan-95.vercel.app'}/payment/processing?order_id={order_id}`,
+      return_url: `${process.env.FRONTEND_URL}/payment/processing?order_id=${orderId}`,
+      notify_url: `${process.env.BACKEND_URL}/api/payments/webhook`,
     },
   };
+
+  console.log("📤 Creating Cashfree order:", orderId);
 
   const response = await fetch(`${cashfreeConfig.apiUrl}/orders`, {
     method: "POST",
@@ -35,16 +44,25 @@ export const createCashfreeOrder = async ({ orderId, amount, customerEmail, cust
   const data = await response.json();
 
   if (!response.ok) {
+    console.error("❌ Cashfree Error:", data);
     throw new Error(data.message || `Cashfree API error: ${response.status}`);
   }
 
-  return data;
+  console.log("✅ Cashfree order created:", data.order_id);
+
+  return {
+    payment_session_id: data.payment_session_id,
+    order_status: data.order_status,
+    payment_link: data.payment_link || null,
+  };
 };
 
 /**
  * Verify Cashfree payment status
  */
 export const verifyCashfreePayment = async (cashfreeOrderId) => {
+  console.log("🔍 Verifying payment for order:", cashfreeOrderId);
+
   const response = await fetch(`${cashfreeConfig.apiUrl}/orders/${cashfreeOrderId}`, {
     method: "GET",
     headers: {
@@ -57,23 +75,38 @@ export const verifyCashfreePayment = async (cashfreeOrderId) => {
   const data = await response.json();
 
   if (!response.ok) {
+    console.error("❌ Cashfree Verify Error:", data);
     throw new Error(data.message || `Cashfree verification error: ${response.status}`);
   }
 
-  return data;
+  console.log("✅ Payment verified:", data.order_status);
+
+  return {
+    order_status: data.order_status,
+    order_amount: data.order_amount,
+    payment_details: data.payments || [],
+  };
 };
 
 /**
  * Verify Cashfree webhook signature
  */
 export const verifyWebhookSignature = (rawBody, timestamp, signature) => {
-  const body = timestamp + rawBody;
-  const expectedSignature = crypto
-    .createHmac("sha256", cashfreeConfig.secretKey)
-    .update(body)
-    .digest("base64");
+  try {
+    const signatureData = timestamp + rawBody;
+    const expectedSignature = crypto
+      .createHmac("sha256", cashfreeConfig.secretKey)
+      .update(signatureData)
+      .digest("base64");
 
-  return expectedSignature === signature;
+    const isValid = expectedSignature === signature;
+    console.log(isValid ? "✅ Webhook signature valid" : "❌ Webhook signature invalid");
+    
+    return isValid;
+  } catch (error) {
+    console.error("❌ Signature verification failed:", error.message);
+    return false;
+  }
 };
 
 /**
@@ -89,18 +122,24 @@ export const processWebhook = async (webhookData) => {
   const cashfreeOrderId = order.order_id;
   const orderStatus = order.order_status;
 
+  console.log(`📨 Webhook received for order: ${cashfreeOrderId}, status: ${orderStatus}`);
+
   let paymentStatus = "PENDING";
+  
   if (orderStatus === "PAID") {
     paymentStatus = "PAID";
-  } else if (orderStatus === "EXPIRED" || orderStatus === "CANCELLED") {
+  } else if (["EXPIRED", "CANCELLED", "TERMINATED"].includes(orderStatus)) {
     paymentStatus = "FAILED";
+  } else if (orderStatus === "ACTIVE") {
+    paymentStatus = "PENDING";
   }
 
-  // Update order in database
   const updatedOrder = await orderService.updateOrderStatusByCashfreeId(
     cashfreeOrderId,
     paymentStatus
   );
+
+  console.log(`✅ Order updated: ${cashfreeOrderId} → ${paymentStatus}`);
 
   return {
     cashfree_order_id: cashfreeOrderId,
