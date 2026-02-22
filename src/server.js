@@ -21,7 +21,12 @@ const { default: app } = await import("./app.js");
 const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, "0.0.0.0", () => {
-  console.log(`\n🚀 Server running → http://0.0.0.0:${PORT}`);
+  console.log(`\n${"═".repeat(50)}`);
+  console.log(`🚀 Server running → http://0.0.0.0:${PORT}`);
   console.log(`📦 Environment: ${process.env.NODE_ENV || "development"}`);
-  console.log(`✅ Health check ready\n`);
+  console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL || "not set"}`);
+  console.log(`🗄️  Supabase: ${process.env.SUPABASE_URL ? "✅ connected" : "❌ missing"}`);
+  console.log(`🔑 JWT Secret: ${process.env.JWT_SECRET ? "✅ set" : "⚠️  using default"}`);
+  console.log(`💰 Cashfree: ${process.env.CASHFREE_APP_ID ? "✅ configured" : "❌ missing"}`);
+  console.log(`${"═".repeat(50)}\n`);
 });

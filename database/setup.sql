@@ -27,6 +27,16 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- ─── Users Table (auth) ───
+CREATE TABLE IF NOT EXISTS users (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ─── Admins Table (optional) ───
 CREATE TABLE IF NOT EXISTS admins (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -39,11 +49,13 @@ CREATE INDEX IF NOT EXISTS idx_orders_buyer_email ON orders(buyer_email);
 CREATE INDEX IF NOT EXISTS idx_orders_cashfree_order_id ON orders(cashfree_order_id);
 CREATE INDEX IF NOT EXISTS idx_orders_payment_status ON orders(payment_status);
 CREATE INDEX IF NOT EXISTS idx_products_is_active ON products(is_active);
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 
 -- ─── Disable RLS (admin-only system) ───
 ALTER TABLE products DISABLE ROW LEVEL SECURITY;
 ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
 ALTER TABLE admins DISABLE ROW LEVEL SECURITY;
+ALTER TABLE users DISABLE ROW LEVEL SECURITY;
 
 -- ─── Create Storage Bucket ───
 -- NOTE: Run this separately or create bucket via Supabase Dashboard:
