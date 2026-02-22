@@ -10,8 +10,13 @@ export const createCashfreeOrder = async ({
   amount, 
   customerEmail, 
   customerPhone, 
-  customerName 
+  customerName,
+  urls = {}, // { returnUrl, notifyUrl }
 }) => {
+  // compute return/notify urls with fallbacks
+  const returnUrl = urls.returnUrl || `${process.env.FRONTEND_URL}/payment/processing?order_id=${orderId}`;
+  const notifyUrl = urls.notifyUrl || `${process.env.BACKEND_URL || process.env.FRONTEND_URL}/api/payments/webhook`;
+
   const requestBody = {
     order_id: orderId,
     order_amount: parseFloat(amount),
@@ -23,8 +28,8 @@ export const createCashfreeOrder = async ({
       customer_name: customerName || "Customer",
     },
     order_meta: {
-      return_url: `${process.env.FRONTEND_URL}/payment/processing?order_id=${orderId}`,
-      notify_url: `${process.env.BACKEND_URL}/api/payments/webhook`,
+      return_url: returnUrl,
+      notify_url: notifyUrl,
     },
   };
 

@@ -45,13 +45,20 @@ export const createPayment = async (req, res) => {
       cashfree_order_id: cashfreeOrderId,
     });
 
-    // Create Cashfree order
+    // Create Cashfree order (provide urls based on request in case env vars not set)
+    const backendBase = `${req.protocol}://${req.get("host")}`;
+    const returnUrl = `${process.env.FRONTEND_URL || backendBase}/payment/processing?order_id=${cashfreeOrderId}`;
+    const notifyUrl = `${backendBase}/api/payments/webhook`;
+
+    console.log("🔧 URLs for cashfree:", { backendBase, returnUrl, notifyUrl, front: process.env.FRONTEND_URL, backEnv: process.env.BACKEND_URL });
+
     const cashfreeOrder = await paymentService.createCashfreeOrder({
       orderId: cashfreeOrderId,
       amount: product.price,
       customerEmail: buyer_email,
       customerPhone: buyer_phone,
       customerName: buyer_name,
+      urls: { returnUrl, notifyUrl },
     });
 
     return sendSuccess(
