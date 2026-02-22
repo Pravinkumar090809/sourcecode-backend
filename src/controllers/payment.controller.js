@@ -17,6 +17,12 @@ export const createPayment = async (req, res) => {
       return sendError(res, "product_id and buyer_email are required", 400);
     }
 
+    // ensure product_id looks like a UUID to avoid db errors
+    const uuidRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+    if (!uuidRegex.test(product_id)) {
+      return sendError(res, "Invalid product_id format", 400);
+    }
+
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(buyer_email)) {
