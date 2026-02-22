@@ -98,7 +98,7 @@ export const downloadOrder = async (req, res) => {
       return sendError(res, "Email does not match this order", 403);
     }
 
-    if (order.payment_status !== "PAID") {
+    if ((order.payment_status || "").toLowerCase() !== "paid") {
       return sendError(res, "Payment not completed. Cannot download.", 403);
     }
 

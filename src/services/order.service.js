@@ -1,5 +1,15 @@
 import supabase from "../config/supabase.js";
 
+// convert status fields to lowercase so front-end comparisons are case-insensitive
+const normalizeOrder = (o) => {
+  if (!o) return o;
+  return {
+    ...o,
+    payment_status: o.payment_status ? String(o.payment_status).toLowerCase() : o.payment_status,
+  };
+};
+
+
 /**
  * Create a new order
  */
@@ -32,7 +42,7 @@ export const getOrderById = async (id) => {
     .single();
 
   if (error) throw new Error(error.message);
-  return data;
+  return normalizeOrder(data);
 };
 
 /**
@@ -46,7 +56,7 @@ export const getOrderByCashfreeId = async (cashfree_order_id) => {
     .single();
 
   if (error) throw new Error(error.message);
-  return data;
+  return normalizeOrder(data);
 };
 
 /**
@@ -60,7 +70,7 @@ export const getOrdersByEmail = async (email) => {
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return data;
+  return (data || []).map(normalizeOrder);
 };
 
 /**
@@ -73,7 +83,7 @@ export const getAllOrders = async () => {
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return data;
+  return (data || []).map(normalizeOrder);
 };
 
 /**
@@ -88,7 +98,7 @@ export const updateOrderStatus = async (id, payment_status) => {
     .single();
 
   if (error) throw new Error(error.message);
-  return data;
+  return normalizeOrder(data);
 };
 
 /**
@@ -103,7 +113,7 @@ export const updateOrderStatusByCashfreeId = async (cashfree_order_id, payment_s
     .single();
 
   if (error) throw new Error(error.message);
-  return data;
+  return normalizeOrder(data);
 };
 
 /**
@@ -117,9 +127,9 @@ export const getOrderStats = async () => {
   if (e1) throw new Error(e1.message);
 
   const total = allOrders.length;
-  const paid = allOrders.filter((o) => o.payment_status === "PAID");
-  const pending = allOrders.filter((o) => o.payment_status === "PENDING");
-  const failed = allOrders.filter((o) => o.payment_status === "FAILED");
+  const paid = allOrders.filter((o) => (o.payment_status || "").toLowerCase() === "paid");
+  const pending = allOrders.filter((o) => (o.payment_status || "").toLowerCase() === "pending");
+  const failed = allOrders.filter((o) => (o.payment_status || "").toLowerCase() === "failed");
   const totalRevenue = paid.reduce((sum, o) => sum + (o.products?.price || 0), 0);
 
   return {
