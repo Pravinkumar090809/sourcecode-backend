@@ -1,154 +1,78 @@
 import express from "express";
-import { supabase } from "../lib/supabase.js";
-import adminAuth from "../middlewares/adminAuth.js";
+import cors from "cors";
 
-const router = express.Router();
+import { errorHandler, notFoundHandler } from "./middlewares/error.middleware.js";
+import { requestLogger } from "./middlewares/logger.middleware.js";
 
-/* =====================================================
-   COUPONS
-===================================================== */
+// ✅ ESM-safe absolute imports for routes
+import authRoutes from new URL("./routes/auth.routes.js", import.meta.url);
+import productRoutes from new URL("./routes/product.routes.js", import.meta.url);
+import orderRoutes from new URL("./routes/order.routes.js", import.meta.url);
+import paymentRoutes from new URL("./routes/payment.routes.js", import.meta.url);
+import adminRoutes from new URL("./routes/admin.routes.js", import.meta.url);
 
-// GET all coupons
-router.get("/coupons", adminAuth, async (req, res) => {
-  const { data, error } = await supabase
-    .from("coupons")
-    .select("*")
-    .order("created_at", { ascending: false });
+const app = express();
 
-  if (error) return res.status(500).json({ success: false, message: error.message });
-  res.json({ success: true, data });
+// ─── CORS ───
+const allowedOrigins = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  process.env.FRONTEND_URL,
+].filter(Boolean);
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (allowedOrigins.includes(origin)) return cb(null, true);
+      if (/\.(vercel\.app|onrender\.com)$/.test(origin)) return cb(null, true);
+      cb(null, false);
+    },
+    credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH"],
+  })
+);
+
+// ─── Global Middlewares ───
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(requestLogger);
+
+// ─── Health & Root ───
+app.get("/health", (req, res) => {
+  res.json({
+    status: "ok",
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
 });
 
-// CREATE coupon
-router.post("/coupons", adminAuth, async (req, res) => {
-  const { data, error } = await supabase
-    .from("coupons")
-    .insert(req.body)
-    .select()
-    .single();
-
-  if (error) return res.status(400).json({ success: false, message: error.message });
-  res.json({ success: true, data });
+app.get("/", (req, res) => {
+  res.json({
+    message: "🔥 Source Code Selling Platform API",
+    version: "1.0.0",
+    endpoints: {
+      health: "/health",
+      auth: "/api/auth",
+      products: "/api/products",
+      orders: "/api/orders",
+      payments: "/api/payments",
+      admin: "/api/admin",
+    },
+  });
 });
 
-// DELETE coupon
-router.delete("/coupons/:id", adminAuth, async (req, res) => {
-  const { error } = await supabase
-    .from("coupons")
-    .delete()
-    .eq("id", req.params.id);
+// ─── API Routes ───
+app.use("/api/auth", authRoutes);
+app.use("/api/products", productRoutes);
+app.use("/api/orders", orderRoutes);
+app.use("/api/payments", paymentRoutes);
+app.use("/api/admin", adminRoutes);
 
-  if (error) return res.status(400).json({ success: false, message: error.message });
-  res.json({ success: true });
-});
+console.log("✅ Admin routes mounted at /api/admin");
 
+// ─── Error Handling ───
+app.use(notFoundHandler);
+app.use(errorHandler);
 
-
-/* =====================================================
-   REVIEWS
-===================================================== */
-
-router.get("/reviews", adminAuth, async (req, res) => {
-  const { data, error } = await supabase
-    .from("reviews")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) return res.status(500).json({ success: false, message: error.message });
-  res.json({ success: true, data });
-});
-
-router.patch("/reviews/:id/approve", adminAuth, async (req, res) => {
-  const { error } = await supabase
-    .from("reviews")
-    .update({ is_approved: true })
-    .eq("id", req.params.id);
-
-  if (error) return res.status(400).json({ success: false, message: error.message });
-  res.json({ success: true });
-});
-
-
-
-/* =====================================================
-   REFUNDS
-===================================================== */
-
-router.get("/refunds", adminAuth, async (req, res) => {
-  const { data, error } = await supabase
-    .from("refunds")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) return res.status(500).json({ success: false, message: error.message });
-  res.json({ success: true, data });
-});
-
-router.patch("/refunds/:id", adminAuth, async (req, res) => {
-  const { status } = req.body;
-
-  const { error } = await supabase
-    .from("refunds")
-    .update({ status })
-    .eq("id", req.params.id);
-
-  if (error) return res.status(400).json({ success: false, message: error.message });
-  res.json({ success: true });
-});
-
-
-
-/* =====================================================
-   SUPPORT TICKETS
-===================================================== */
-
-router.get("/support-tickets", adminAuth, async (req, res) => {
-  const { data, error } = await supabase
-    .from("support_tickets")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (error) return res.status(500).json({ success: false, message: error.message });
-  res.json({ success: true, data });
-});
-
-router.patch("/support-tickets/:id/reply", adminAuth, async (req, res) => {
-  const { admin_reply, status } = req.body;
-
-  const { error } = await supabase
-    .from("support_tickets")
-    .update({ admin_reply, status })
-    .eq("id", req.params.id);
-
-  if (error) return res.status(400).json({ success: false, message: error.message });
-  res.json({ success: true });
-});
-
-
-
-/* =====================================================
-   SETTINGS
-===================================================== */
-
-router.get("/settings", adminAuth, async (req, res) => {
-  const { data, error } = await supabase.from("settings").select("*");
-
-  if (error) return res.status(500).json({ success: false });
-  res.json({ success: true, data });
-});
-
-router.patch("/settings", adminAuth, async (req, res) => {
-  const updates = Object.entries(req.body).map(([key, value]) => ({
-    key,
-    value,
-  }));
-
-  const { error } = await supabase
-    .from("settings")
-    .upsert(updates, { onConflict: "key" });
-
-  if (error) return res.status(400).json({ success: false, message: error.message });
-  res.json({ success: true });
-});
-
-export default router;
+export default app;
