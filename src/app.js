@@ -4,6 +4,7 @@ import cors from "cors";
 import authRoutes from "./routes/auth.routes.js";
 import productRoutes from "./routes/product.routes.js";
 import orderRoutes from "./routes/order.routes.js";
+import supportRoutes from "./routes/support.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 
@@ -55,6 +56,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);
+app.use("/api/support", supportRoutes);
 app.use("/api/admin", adminRoutes);
 
 console.log("✅ Admin routes mounted");
