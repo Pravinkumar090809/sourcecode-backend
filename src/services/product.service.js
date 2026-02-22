@@ -15,13 +15,14 @@ export const getAllProducts = async () => {
 };
 
 /**
- * Get single product by ID (public)
+ * Get single product by ID (public — only active)
  */
 export const getProductById = async (id) => {
   const { data, error } = await supabase
     .from("products")
     .select("*")
     .eq("id", id)
+    .eq("is_active", true)
     .single();
 
   if (error) throw new Error(error.message);
