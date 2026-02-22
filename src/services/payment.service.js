@@ -17,7 +17,7 @@ export const createCashfreeOrder = async ({ orderId, amount, customerEmail, cust
       customer_name: customerName || "Customer",
     },
     order_meta: {
-      return_url: returnUrl || `${process.env.FRONTEND_URL}/payment/status?order_id={order_id}`,
+      return_url: returnUrl || `${process.env.FRONTEND_URL || 'https://frontend-one-cyan-95.vercel.app'}/payment/processing?order_id={order_id}`,
     },
   };
 
