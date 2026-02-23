@@ -62,7 +62,22 @@ export const createProduct = async ({ title, description, price, zip_path, tags 
     .select()
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    // if tags column missing, retry without it
+    const msg = String(error.message || "");
+    if ((msg.includes("tags") || msg.includes("Could not find")) && payload.tags !== undefined) {
+      console.warn("createProduct: tags column missing, retrying without tags");
+      delete payload.tags;
+      const { data: d2, error: e2 } = await supabase
+        .from("products")
+        .insert([payload])
+        .select()
+        .single();
+      if (e2) throw new Error(e2.message);
+      return d2;
+    }
+    throw new Error(error.message);
+  }
   return data;
 };
 
@@ -87,7 +102,23 @@ export const updateProduct = async (id, updates) => {
     .select()
     .single();
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    // if tags column missing, retry without it
+    const msg = String(error.message || "");
+    if ((msg.includes("tags") || msg.includes("Could not find")) && cleanUpdates.tags !== undefined) {
+      console.warn("updateProduct: tags column missing, retrying without tags");
+      delete cleanUpdates.tags;
+      const { data: d2, error: e2 } = await supabase
+        .from("products")
+        .update(cleanUpdates)
+        .eq("id", id)
+        .select()
+        .single();
+      if (e2) throw new Error(e2.message);
+      return d2;
+    }
+    throw new Error(error.message);
+  }
   return data;
 };
 

@@ -12,21 +12,13 @@ const normalizeOrder = (o) => {
 
 /**
  * Create a new order
+ *
+ * Uses a cascading fallback strategy so the insert succeeds even when
+ * optional columns (user_id, downloads_used, max_downloads) are missing
+ * from the live database.
  */
 export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, user_id = null }) => {
-  // base payload
-  const basePayload = {
-    product_id,
-    buyer_email,
-    payment_status: "PENDING",
-    cashfree_order_id: cashfree_order_id || null,
-  };
-  if (user_id) basePayload.user_id = user_id;
-
-  // attempt with downloads columns first (for new schemas)
-  let payload = { ...basePayload, downloads_used: 0, max_downloads: 1 };
-
-  const tryInsert = async (p) => {
+  const doInsert = async (p) => {
     const { data, error } = await supabase
       .from("orders")
       .insert([p])
@@ -36,16 +28,55 @@ export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, 
     return data;
   };
 
+  const isColumnError = (msg) =>
+    msg.includes("Could not find") ||
+    msg.includes("column") ||
+    msg.includes("schema cache");
+
+  // ── attempt 1: full payload (all optional columns) ──
+  const fullPayload = {
+    product_id,
+    buyer_email,
+    payment_status: "PENDING",
+    cashfree_order_id: cashfree_order_id || null,
+  };
+  if (user_id) fullPayload.user_id = user_id;
+  fullPayload.downloads_used = 0;
+  fullPayload.max_downloads = 1;
+
   try {
-    return await tryInsert(payload);
-  } catch (err) {
-    const msg = err.message || "";
-    if (msg.includes("downloads_used") || msg.includes("max_downloads")) {
-      // fall back to payload without those fields
-      return await tryInsert(basePayload);
-    }
-    throw err;
+    return await doInsert(fullPayload);
+  } catch (err1) {
+    if (!isColumnError(String(err1.message))) throw err1;
+    console.warn("createOrder attempt-1 failed (column missing):", err1.message);
   }
+
+  // ── attempt 2: without download counters but keep user_id ──
+  const midPayload = {
+    product_id,
+    buyer_email,
+    payment_status: "PENDING",
+    cashfree_order_id: cashfree_order_id || null,
+  };
+  if (user_id) midPayload.user_id = user_id;
+
+  try {
+    return await doInsert(midPayload);
+  } catch (err2) {
+    if (!isColumnError(String(err2.message))) throw err2;
+    console.warn("createOrder attempt-2 failed (column missing):", err2.message);
+  }
+
+  // ── attempt 3: absolute minimum (no user_id, no download cols) ──
+  const minPayload = {
+    product_id,
+    buyer_email,
+    payment_status: "PENDING",
+    cashfree_order_id: cashfree_order_id || null,
+  };
+
+  console.warn("createOrder attempt-3: minimal payload");
+  return await doInsert(minPayload);
 };
 
 /**
@@ -78,12 +109,34 @@ export const getOrderByCashfreeId = async (cashfree_order_id) => {
 
 /**
  * Fetch a paid order belonging to a user for a specific product.
- * Returns null if not found. */
-export const getPaidOrderForUserProduct = async (user_id, product_id) => {
+ * Falls back to buyer_email lookup when user_id column is missing.
+ * Returns null if not found.
+ */
+export const getPaidOrderForUserProduct = async (user_id, product_id, buyer_email = null) => {
+  // attempt 1: filter by user_id
+  try {
+    const { data, error } = await supabase
+      .from("orders")
+      .select("*, products(*)")
+      .eq("user_id", user_id)
+      .eq("product_id", product_id)
+      .eq("payment_status", "PAID")
+      .maybeSingle();
+
+    if (error) throw new Error(error.message);
+    return normalizeOrder(data);
+  } catch (err) {
+    const msg = String(err.message || "");
+    if (!msg.includes("user_id") && !msg.includes("Could not find")) throw err;
+    console.warn("getPaidOrderForUserProduct: user_id column missing, falling back to buyer_email");
+  }
+
+  // attempt 2: filter by buyer_email instead
+  if (!buyer_email) return null;
   const { data, error } = await supabase
     .from("orders")
     .select("*, products(*)")
-    .eq("user_id", user_id)
+    .eq("buyer_email", buyer_email)
     .eq("product_id", product_id)
     .eq("payment_status", "PAID")
     .maybeSingle();
@@ -93,11 +146,11 @@ export const getPaidOrderForUserProduct = async (user_id, product_id) => {
 };
 
 /**
- * Increment the downloads_used counter for an order
+ * Increment the downloads_used counter for an order.
+ * Silently skips if the column doesn't exist in the live DB.
  */
 export const incrementDownloads = async (order_id) => {
   try {
-    // read current value then update
     const { data: order, error: e1 } = await supabase
       .from("orders")
       .select("downloads_used")
@@ -114,13 +167,15 @@ export const incrementDownloads = async (order_id) => {
     if (error) throw new Error(error.message);
     return normalizeOrder(data);
   } catch (err) {
-    // if columns are missing, ignore and return without modifying
-    const m = String(err.message || "").toLowerCase();
-    if (m.includes("downloads_used") || m.includes("column") && m.includes("does not exist")) {
-      console.warn("incrementDownloads skipped – column missing", err.message);
-      // fetch order without increment
-      const { data } = await supabase.from("orders").select("*").eq("id", order_id).single();
-      return normalizeOrder(data);
+    const m = String(err.message || "");
+    if (m.includes("Could not find") || m.includes("column") || m.includes("schema cache") || m.includes("downloads_used")) {
+      console.warn("incrementDownloads skipped – column missing:", err.message);
+      try {
+        const { data } = await supabase.from("orders").select("*").eq("id", order_id).single();
+        return normalizeOrder(data);
+      } catch (_) {
+        return null;
+      }
     }
     throw err;
   }

@@ -24,11 +24,8 @@ export const createOrder = async (req, res) => {
     const order = await orderService.createOrder({ product_id, buyer_email, user_id: req.user && req.user.id });
     return sendSuccess(res, order, "Order created successfully", 201);
   } catch (error) {
-    console.error("💥 download error:", error.message);
-    const msg = String(error.message || "").toLowerCase();
-    if (msg.includes("not found") || msg.includes("no such file")) {
-      return sendError(res, "File not found in storage", 404, error.message);
-    }    return sendError(res, "Failed to create order", 500, error.message);
+    console.error("💥 createOrder error:", error.message);
+    return sendError(res, "Failed to create order", 500, error.message);
   }
 };
 
@@ -41,11 +38,8 @@ export const getOrder = async (req, res) => {
     const order = await orderService.getOrderById(id);
     return sendSuccess(res, order, "Order fetched successfully");
   } catch (error) {
-    console.error("💥 download error:", error.message);
-    const msg = String(error.message || "").toLowerCase();
-    if (msg.includes("not found") || msg.includes("no such file")) {
-      return sendError(res, "File not found in storage", 404, error.message);
-    }    return sendError(res, "Order not found", 404, error.message);
+    console.error("💥 getOrder error:", error.message);
+    return sendError(res, "Order not found", 404, error.message);
   }
 };
 
@@ -63,11 +57,8 @@ export const getOrdersByEmail = async (req, res) => {
     const orders = await orderService.getOrdersByEmail(email);
     return sendSuccess(res, orders, "Orders fetched successfully");
   } catch (error) {
-    console.error("💥 download error:", error.message);
-    const msg = String(error.message || "").toLowerCase();
-    if (msg.includes("not found") || msg.includes("no such file")) {
-      return sendError(res, "File not found in storage", 404, error.message);
-    }    return sendError(res, "Failed to fetch orders", 500, error.message);
+    console.error("💥 getOrdersByEmail error:", error.message);
+    return sendError(res, "Failed to fetch orders", 500, error.message);
   }
 };
 
@@ -79,11 +70,8 @@ export const getAllOrders = async (req, res) => {
     const orders = await orderService.getAllOrders();
     return sendSuccess(res, orders, "All orders fetched");
   } catch (error) {
-    console.error("💥 download error:", error.message);
-    const msg = String(error.message || "").toLowerCase();
-    if (msg.includes("not found") || msg.includes("no such file")) {
-      return sendError(res, "File not found in storage", 404, error.message);
-    }    return sendError(res, "Failed to fetch orders", 500, error.message);
+    console.error("💥 getAllOrders error:", error.message);
+    return sendError(res, "Failed to fetch orders", 500, error.message);
   }
 };
 
@@ -95,11 +83,8 @@ export const getOrderStats = async (req, res) => {
     const stats = await orderService.getOrderStats();
     return sendSuccess(res, stats, "Order stats fetched");
   } catch (error) {
-    console.error("💥 download error:", error.message);
-    const msg = String(error.message || "").toLowerCase();
-    if (msg.includes("not found") || msg.includes("no such file")) {
-      return sendError(res, "File not found in storage", 404, error.message);
-    }    return sendError(res, "Failed to fetch stats", 500, error.message);
+    console.error("💥 getOrderStats error:", error.message);
+    return sendError(res, "Failed to fetch stats", 500, error.message);
   }
 };
 
@@ -125,8 +110,8 @@ export const downloadByProduct = async (req, res) => {
       return sendError(res, "Product not found", 404);
     }
 
-    // fetch paid order for this user/product
-    const order = await orderService.getPaidOrderForUserProduct(userId, productId);
+    // fetch paid order for this user/product (pass email for fallback if user_id col missing)
+    const order = await orderService.getPaidOrderForUserProduct(userId, productId, req.user.email);
     if (!order) {
       return sendError(res, "No paid order found for this product", 403);
     }
@@ -190,8 +175,8 @@ export const downloadOrder = async (req, res) => {
       return sendError(res, "Order not found", 404);
     }
 
-    // ensure the order belongs to the logged in user
-    if (order.user_id !== userId) {
+    // ensure the order belongs to the logged-in user (skip check if user_id col missing)
+    if (order.user_id && order.user_id !== userId) {
       return sendError(res, "This order does not belong to you", 403);
     }
 

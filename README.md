@@ -93,14 +93,14 @@ Run the SQL in `database/setup.sql` in your Supabase SQL Editor.
 > optional but will enable tag filtering in future UI
 > updates.
 >
-> **Orders columns**: the system keeps track of `downloads_used`
-> and `max_downloads`. if these columns are missing you may
-> see errors like
-> `Could not find the 'downloads_used' column of 'orders'
-> in the schema cache` when creating a payment. the code now
-> gracefully falls back to inserting without those fields,
-> but you should still add the columns to enable download
-> limits:
+> **Orders columns**: the system tracks the buyer (`user_id`)
+> and download counts (`downloads_used`, `max_downloads`).
+> On older schemas you may hit errors such as
+> `Could not find the 'user_id' column` or the earlier
+> `downloads_used` message when creating a payment. The
+> backend will now automatically retry without the missing
+> fields so your site continues working, but to restore
+> full limits and logging run:
 >
 > ```sql
 > ALTER TABLE orders
@@ -109,6 +109,5 @@ Run the SQL in `database/setup.sql` in your Supabase SQL Editor.
 >   ADD COLUMN IF NOT EXISTS max_downloads INTEGER DEFAULT 1 NOT NULL;
 > ```
 >
-> Running the above will restore full functionality; once
-> added the application will automatically populate and
-> increment the counts.
+> Once the columns exist, new orders are created with the
+> extra metadata and downloads are counted dynamically.
