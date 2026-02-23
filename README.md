@@ -80,6 +80,18 @@ Run the SQL in `database/setup.sql` in your Supabase SQL Editor.
 > ```
 > These fields are automatically populated when new
 > orders are created from an authenticated session.
+>
+> **Tag column**: products now support an optional `tags`
+> field. If your database predates this change you can run:
+>
+> ```sql
+> ALTER TABLE products ADD COLUMN IF NOT EXISTS tags TEXT DEFAULT '';
+> ```
+> 
+> The backend will only include the `tags` property in
+> inserts when a value is provided, so the migration is
+> optional but will enable tag filtering in future UI
+> updates.
 
 ## 🌐 Deploy (Render)
 

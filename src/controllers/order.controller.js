@@ -24,7 +24,11 @@ export const createOrder = async (req, res) => {
     const order = await orderService.createOrder({ product_id, buyer_email, user_id: req.user && req.user.id });
     return sendSuccess(res, order, "Order created successfully", 201);
   } catch (error) {
-    return sendError(res, "Failed to create order", 500, error.message);
+    console.error("💥 download error:", error.message);
+    const msg = String(error.message || "").toLowerCase();
+    if (msg.includes("not found") || msg.includes("no such file")) {
+      return sendError(res, "File not found in storage", 404, error.message);
+    }    return sendError(res, "Failed to create order", 500, error.message);
   }
 };
 
@@ -37,7 +41,11 @@ export const getOrder = async (req, res) => {
     const order = await orderService.getOrderById(id);
     return sendSuccess(res, order, "Order fetched successfully");
   } catch (error) {
-    return sendError(res, "Order not found", 404, error.message);
+    console.error("💥 download error:", error.message);
+    const msg = String(error.message || "").toLowerCase();
+    if (msg.includes("not found") || msg.includes("no such file")) {
+      return sendError(res, "File not found in storage", 404, error.message);
+    }    return sendError(res, "Order not found", 404, error.message);
   }
 };
 
@@ -55,7 +63,11 @@ export const getOrdersByEmail = async (req, res) => {
     const orders = await orderService.getOrdersByEmail(email);
     return sendSuccess(res, orders, "Orders fetched successfully");
   } catch (error) {
-    return sendError(res, "Failed to fetch orders", 500, error.message);
+    console.error("💥 download error:", error.message);
+    const msg = String(error.message || "").toLowerCase();
+    if (msg.includes("not found") || msg.includes("no such file")) {
+      return sendError(res, "File not found in storage", 404, error.message);
+    }    return sendError(res, "Failed to fetch orders", 500, error.message);
   }
 };
 
@@ -67,7 +79,11 @@ export const getAllOrders = async (req, res) => {
     const orders = await orderService.getAllOrders();
     return sendSuccess(res, orders, "All orders fetched");
   } catch (error) {
-    return sendError(res, "Failed to fetch orders", 500, error.message);
+    console.error("💥 download error:", error.message);
+    const msg = String(error.message || "").toLowerCase();
+    if (msg.includes("not found") || msg.includes("no such file")) {
+      return sendError(res, "File not found in storage", 404, error.message);
+    }    return sendError(res, "Failed to fetch orders", 500, error.message);
   }
 };
 
@@ -79,7 +95,11 @@ export const getOrderStats = async (req, res) => {
     const stats = await orderService.getOrderStats();
     return sendSuccess(res, stats, "Order stats fetched");
   } catch (error) {
-    return sendError(res, "Failed to fetch stats", 500, error.message);
+    console.error("💥 download error:", error.message);
+    const msg = String(error.message || "").toLowerCase();
+    if (msg.includes("not found") || msg.includes("no such file")) {
+      return sendError(res, "File not found in storage", 404, error.message);
+    }    return sendError(res, "Failed to fetch stats", 500, error.message);
   }
 };
 
@@ -144,7 +164,11 @@ export const downloadByProduct = async (req, res) => {
       warning: `This download link expires in ${DOWNLOAD_EXPIRY_SECONDS / 60} minutes. Download immediately.`,
     }, "Download URL generated");
   } catch (error) {
-    return sendError(res, "Failed to generate download link", 500, error.message);
+    console.error("💥 download error:", error.message);
+    const msg = String(error.message || "").toLowerCase();
+    if (msg.includes("not found") || msg.includes("no such file")) {
+      return sendError(res, "File not found in storage", 404, error.message);
+    }    return sendError(res, "Failed to generate download link", 500, error.message);
   }
 };
 
@@ -207,6 +231,10 @@ export const downloadOrder = async (req, res) => {
       warning: `This download link expires in ${DOWNLOAD_EXPIRY_SECONDS / 60} minutes. Download immediately.`,
     }, "Download URL generated");
   } catch (error) {
-    return sendError(res, "Failed to generate download link", 500, error.message);
+    console.error("💥 download error:", error.message);
+    const msg = String(error.message || "").toLowerCase();
+    if (msg.includes("not found") || msg.includes("no such file")) {
+      return sendError(res, "File not found in storage", 404, error.message);
+    }    return sendError(res, "Failed to generate download link", 500, error.message);
   }
 };

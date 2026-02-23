@@ -46,18 +46,19 @@ export const getAllProductsAdmin = async () => {
  * Create a new product (admin)
  */
 export const createProduct = async ({ title, description, price, zip_path, tags }) => {
+  // build payload dynamically so we don't send 'tags' field if database doesn't have it
+  const payload = {
+    title,
+    description: description || "",
+    price: Number(price),
+    zip_path: zip_path || null,
+    is_active: true,
+  };
+  if (tags !== undefined) payload.tags = tags;
+
   const { data, error } = await supabase
     .from("products")
-    .insert([
-      {
-        title,
-        description: description || "",
-        price: Number(price),
-        zip_path: zip_path || null,
-        tags: tags || "",
-        is_active: true,
-      },
-    ])
+    .insert([payload])
     .select()
     .single();
 
