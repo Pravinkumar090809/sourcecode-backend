@@ -118,7 +118,9 @@ echo ""
 echo "── Order APIs ──"
 if [ -n "$PRODUCT_ID" ]; then
   R=$(curl -s -m $TIMEOUT -X POST "$BASE/api/orders" \
-    -H "Content-Type: application/json" \    -H "Authorization: Bearer $TOKEN" \    -d "{\"product_id\":\"$PRODUCT_ID\",\"buyer_email\":\"testbuyer@gmail.com\"}")
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
+    -d "{\"product_id\":\"$PRODUCT_ID\",\"buyer_email\":\"testbuyer@gmail.com\"}")
   check "POST /api/orders (create)" "$R"
   ORDER_ID=$(echo "$R" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
   echo "   → Order ID: $ORDER_ID"

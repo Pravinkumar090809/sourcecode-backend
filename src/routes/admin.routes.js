@@ -25,7 +25,7 @@ const upload = multer({
 // ─── Admin Routes ───
 
 /**
- * POST /api/admin/upload — Upload ZIP file
+ * POST /api/admin/upload — Upload ZIP file (standalone)
  */
 router.post("/upload", adminAuth, upload.single("file"), async (req, res) => {
   try {
@@ -38,6 +38,74 @@ router.post("/upload", adminAuth, upload.single("file"), async (req, res) => {
     return sendSuccess(res, { zip_path: result.path }, "File uploaded successfully", 201);
   } catch (error) {
     return sendError(res, "Upload failed", 500, error.message);
+  }
+});
+
+/**
+ * POST /api/admin/products/create-with-upload
+ * Create product + upload ZIP in one step (multipart form)
+ * Fields: title, description, price, tags   |  File field: file (ZIP)
+ */
+router.post("/products/create-with-upload", adminAuth, upload.single("file"), async (req, res) => {
+  try {
+    const { title, description, price, tags } = req.body;
+
+    if (!title || !price) {
+      return sendError(res, "title and price are required", 400);
+    }
+    if (Number(price) <= 0) {
+      return sendError(res, "price must be greater than 0", 400);
+    }
+
+    let zip_path = null;
+    if (req.file) {
+      const uploadResult = await storageService.uploadZipFile(req.file.buffer, req.file.originalname);
+      zip_path = uploadResult.path;
+      await adminService.logActivity("File Uploaded", "Admin", `Uploaded ${req.file.originalname} with product "${title}"`, "file");
+    }
+
+    const product = await productService.createProduct({ title, description, price, zip_path, tags });
+    await adminService.logActivity("Product Created", "Admin", `Created product "${title}" (₹${price})`, "product");
+
+    return sendSuccess(res, product, "Product created successfully", 201);
+  } catch (error) {
+    return sendError(res, "Failed to create product", 500, error.message);
+  }
+});
+
+/**
+ * PUT /api/admin/products/:id/update-with-upload
+ * Update product + optionally replace ZIP (multipart form)
+ * Fields: title, description, price, tags   |  File field: file (ZIP, optional)
+ */
+router.put("/products/:id/update-with-upload", adminAuth, upload.single("file"), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updates = { ...req.body };
+
+    // If a new file was uploaded, upload to storage and set zip_path
+    if (req.file) {
+      // Optionally delete old file
+      try {
+        const existingProduct = await productService.getProductById(id).catch(() => null);
+        if (existingProduct?.zip_path) {
+          await storageService.deleteFile(existingProduct.zip_path).catch(() => {});
+        }
+      } catch (_) { /* ignore */ }
+
+      const uploadResult = await storageService.uploadZipFile(req.file.buffer, req.file.originalname);
+      updates.zip_path = uploadResult.path;
+      await adminService.logActivity("File Replaced", "Admin", `Replaced ZIP for product ${id}`, "file");
+    }
+
+    if (updates.price) updates.price = Number(updates.price);
+
+    const product = await productService.updateProduct(id, updates);
+    await adminService.logActivity("Product Updated", "Admin", `Updated product "${product.title}"`, "product");
+
+    return sendSuccess(res, product, "Product updated successfully");
+  } catch (error) {
+    return sendError(res, "Failed to update product", 500, error.message);
   }
 });
 

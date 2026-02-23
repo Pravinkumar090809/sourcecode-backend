@@ -45,7 +45,7 @@ export const getAllProductsAdmin = async () => {
 /**
  * Create a new product (admin)
  */
-export const createProduct = async ({ title, description, price, zip_path }) => {
+export const createProduct = async ({ title, description, price, zip_path, tags }) => {
   const { data, error } = await supabase
     .from("products")
     .insert([
@@ -54,6 +54,7 @@ export const createProduct = async ({ title, description, price, zip_path }) => 
         description: description || "",
         price: Number(price),
         zip_path: zip_path || null,
+        tags: tags || "",
         is_active: true,
       },
     ])
@@ -69,7 +70,7 @@ export const createProduct = async ({ title, description, price, zip_path }) => 
  */
 export const updateProduct = async (id, updates) => {
   // Only allow specific fields to be updated
-  const allowedFields = ["title", "description", "price", "zip_path", "is_active"];
+  const allowedFields = ["title", "description", "price", "zip_path", "tags", "is_active"];
   const cleanUpdates = {};
 
   for (const key of allowedFields) {

@@ -6,6 +6,16 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- ─── Users Table (auth) — must be created BEFORE orders ───
+CREATE TABLE IF NOT EXISTS users (
+  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+  name TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin')),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
 -- ─── Products Table ───
 CREATE TABLE IF NOT EXISTS products (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -13,6 +23,7 @@ CREATE TABLE IF NOT EXISTS products (
   description TEXT DEFAULT '',
   price INTEGER NOT NULL CHECK (price > 0),
   zip_path TEXT,
+  tags TEXT DEFAULT '',
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -27,16 +38,6 @@ CREATE TABLE IF NOT EXISTS orders (
   cashfree_order_id TEXT UNIQUE,
   downloads_used INTEGER DEFAULT 0 NOT NULL,
   max_downloads INTEGER DEFAULT 1 NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- ─── Users Table (auth) ───
-CREATE TABLE IF NOT EXISTS users (
-  id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  role TEXT DEFAULT 'user' CHECK (role IN ('user', 'admin')),
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

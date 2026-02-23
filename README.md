@@ -47,7 +47,9 @@ npm start
 | DELETE | `/api/products/:id/permanent` | Hard delete |
 | GET | `/api/orders/admin/all` | All orders |
 | GET | `/api/orders/admin/stats` | Order stats |
-| POST | `/api/admin/upload` | Upload ZIP file |
+| POST | `/api/admin/upload` | Upload ZIP file (standalone) |
+| POST | `/api/admin/products/create-with-upload` | Create product + upload ZIP (multipart) |
+| PUT | `/api/admin/products/:id/update-with-upload` | Update product + replace ZIP (multipart) |
 | GET | `/api/admin/files` | List uploaded files |
 | DELETE | `/api/admin/files/:path` | Delete file |
 | GET | `/api/admin/dashboard` | Dashboard stats |

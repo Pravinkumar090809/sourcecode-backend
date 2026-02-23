@@ -121,7 +121,8 @@ export const downloadByProduct = async (req, res) => {
       return sendError(res, "No downloadable file for this product", 404);
     }
 
-    const downloadUrl = await storageService.getSignedDownloadUrl(product.zip_path);
+    const DOWNLOAD_EXPIRY_SECONDS = 600; // 10 minutes
+    const downloadUrl = await storageService.getSignedDownloadUrl(product.zip_path, DOWNLOAD_EXPIRY_SECONDS);
 
     // increment and log
     await orderService.incrementDownloads(order.id);
@@ -134,7 +135,14 @@ export const downloadByProduct = async (req, res) => {
       ip_address: req.ip || req.connection.remoteAddress || "",
     });
 
-    return sendSuccess(res, { download_url: downloadUrl }, "Download URL generated");
+    return sendSuccess(res, {
+      download_url: downloadUrl,
+      expires_in: DOWNLOAD_EXPIRY_SECONDS,
+      expires_at: new Date(Date.now() + DOWNLOAD_EXPIRY_SECONDS * 1000).toISOString(),
+      downloads_used: (used + 1),
+      max_downloads: max,
+      warning: `This download link expires in ${DOWNLOAD_EXPIRY_SECONDS / 60} minutes. Download immediately.`,
+    }, "Download URL generated");
   } catch (error) {
     return sendError(res, "Failed to generate download link", 500, error.message);
   }
@@ -177,7 +185,8 @@ export const downloadOrder = async (req, res) => {
       return sendError(res, "No downloadable file for this product", 404);
     }
 
-    const downloadUrl = await storageService.getSignedDownloadUrl(order.products.zip_path);
+    const DOWNLOAD_EXPIRY_SECONDS = 600; // 10 minutes
+    const downloadUrl = await storageService.getSignedDownloadUrl(order.products.zip_path, DOWNLOAD_EXPIRY_SECONDS);
     // increment counter and log
     await orderService.incrementDownloads(order.id);
     await adminService.logDownload({
@@ -189,7 +198,14 @@ export const downloadOrder = async (req, res) => {
       ip_address: req.ip || req.connection.remoteAddress || "",
     });
 
-    return sendSuccess(res, { download_url: downloadUrl }, "Download URL generated");
+    return sendSuccess(res, {
+      download_url: downloadUrl,
+      expires_in: DOWNLOAD_EXPIRY_SECONDS,
+      expires_at: new Date(Date.now() + DOWNLOAD_EXPIRY_SECONDS * 1000).toISOString(),
+      downloads_used: (used + 1),
+      max_downloads: max,
+      warning: `This download link expires in ${DOWNLOAD_EXPIRY_SECONDS / 60} minutes. Download immediately.`,
+    }, "Download URL generated");
   } catch (error) {
     return sendError(res, "Failed to generate download link", 500, error.message);
   }
