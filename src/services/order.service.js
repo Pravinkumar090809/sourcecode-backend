@@ -14,24 +14,38 @@ const normalizeOrder = (o) => {
  * Create a new order
  */
 export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, user_id = null }) => {
-  const payload = {
+  // base payload
+  const basePayload = {
     product_id,
     buyer_email,
     payment_status: "PENDING",
     cashfree_order_id: cashfree_order_id || null,
-    downloads_used: 0,
-    max_downloads: 1,
   };
-  if (user_id) payload.user_id = user_id;
+  if (user_id) basePayload.user_id = user_id;
 
-  const { data, error } = await supabase
-    .from("orders")
-    .insert([payload])
-    .select()
-    .single();
+  // attempt with downloads columns first (for new schemas)
+  let payload = { ...basePayload, downloads_used: 0, max_downloads: 1 };
 
-  if (error) throw new Error(error.message);
-  return data;
+  const tryInsert = async (p) => {
+    const { data, error } = await supabase
+      .from("orders")
+      .insert([p])
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  };
+
+  try {
+    return await tryInsert(payload);
+  } catch (err) {
+    const msg = err.message || "";
+    if (msg.includes("downloads_used") || msg.includes("max_downloads")) {
+      // fall back to payload without those fields
+      return await tryInsert(basePayload);
+    }
+    throw err;
+  }
 };
 
 /**
@@ -82,22 +96,34 @@ export const getPaidOrderForUserProduct = async (user_id, product_id) => {
  * Increment the downloads_used counter for an order
  */
 export const incrementDownloads = async (order_id) => {
-  // read current value then update
-  const { data: order, error: e1 } = await supabase
-    .from("orders")
-    .select("downloads_used")
-    .eq("id", order_id)
-    .single();
-  if (e1) throw new Error(e1.message);
-  const newCount = (order.downloads_used || 0) + 1;
-  const { data, error } = await supabase
-    .from("orders")
-    .update({ downloads_used: newCount })
-    .eq("id", order_id)
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return normalizeOrder(data);
+  try {
+    // read current value then update
+    const { data: order, error: e1 } = await supabase
+      .from("orders")
+      .select("downloads_used")
+      .eq("id", order_id)
+      .single();
+    if (e1) throw new Error(e1.message);
+    const newCount = (order.downloads_used || 0) + 1;
+    const { data, error } = await supabase
+      .from("orders")
+      .update({ downloads_used: newCount })
+      .eq("id", order_id)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return normalizeOrder(data);
+  } catch (err) {
+    // if columns are missing, ignore and return without modifying
+    const m = String(err.message || "").toLowerCase();
+    if (m.includes("downloads_used") || m.includes("column") && m.includes("does not exist")) {
+      console.warn("incrementDownloads skipped – column missing", err.message);
+      // fetch order without increment
+      const { data } = await supabase.from("orders").select("*").eq("id", order_id).single();
+      return normalizeOrder(data);
+    }
+    throw err;
+  }
 };
 
 /**

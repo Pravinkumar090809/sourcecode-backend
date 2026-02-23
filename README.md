@@ -92,11 +92,23 @@ Run the SQL in `database/setup.sql` in your Supabase SQL Editor.
 > inserts when a value is provided, so the migration is
 > optional but will enable tag filtering in future UI
 > updates.
-
-## 🌐 Deploy (Render)
-
-1. Push to GitHub
-2. Connect repo to Render
-3. Set environment variables
-4. Build command: `npm install`
-5. Start command: `npm start`
+>
+> **Orders columns**: the system keeps track of `downloads_used`
+> and `max_downloads`. if these columns are missing you may
+> see errors like
+> `Could not find the 'downloads_used' column of 'orders'
+> in the schema cache` when creating a payment. the code now
+> gracefully falls back to inserting without those fields,
+> but you should still add the columns to enable download
+> limits:
+>
+> ```sql
+> ALTER TABLE orders
+>   ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id),
+>   ADD COLUMN IF NOT EXISTS downloads_used INTEGER DEFAULT 0 NOT NULL,
+>   ADD COLUMN IF NOT EXISTS max_downloads INTEGER DEFAULT 1 NOT NULL;
+> ```
+>
+> Running the above will restore full functionality; once
+> added the application will automatically populate and
+> increment the counts.
