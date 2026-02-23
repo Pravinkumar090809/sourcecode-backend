@@ -21,9 +21,12 @@ CREATE TABLE IF NOT EXISTS products (
 CREATE TABLE IF NOT EXISTS orders (
   id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
   product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   buyer_email TEXT NOT NULL,
   payment_status TEXT DEFAULT 'PENDING' CHECK (payment_status IN ('PENDING', 'PAID', 'FAILED')),
   cashfree_order_id TEXT UNIQUE,
+  downloads_used INTEGER DEFAULT 0 NOT NULL,
+  max_downloads INTEGER DEFAULT 1 NOT NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

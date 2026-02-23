@@ -7,6 +7,7 @@ import orderRoutes from "./routes/order.routes.js";
 import supportRoutes from "./routes/support.routes.js";
 import paymentRoutes from "./routes/payment.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
+import downloadRoutes from "./routes/download.routes.js";
 
 import { errorHandler, notFoundHandler } from "./middlewares/error.middleware.js";
 import { requestLogger } from "./middlewares/logger.middleware.js";
@@ -53,6 +54,7 @@ app.get("/", (req, res) => {
 
 // ─── Routes ───
 app.use("/api/auth", authRoutes);
+app.use("/api/download", downloadRoutes); // secure download endpoint by product ID
 app.use("/api/products", productRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/payments", paymentRoutes);

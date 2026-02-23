@@ -1,5 +1,6 @@
 import express from "express";
 import * as paymentController from "../controllers/payment.controller.js";
+import { userAuth } from "../middlewares/auth.middleware.js";
 
 const router = express.Router();
 
@@ -8,7 +9,7 @@ const router = express.Router();
  * @desc    Create a new payment order
  * @access  Public
  */
-router.post("/create", paymentController.createPayment);
+router.post("/create", userAuth, paymentController.createPayment);
 
 /**
  * @route   GET /api/payments/verify/:cashfreeOrderId

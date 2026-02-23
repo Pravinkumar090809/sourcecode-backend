@@ -76,6 +76,20 @@ R=$(curl -s -X POST "$BASE/api/products" \
   -d '{"description":"no title"}')
 if echo "$R" | grep -q 'title and price are required'; then green "Validation: missing title/price"; else red "Validation → $R"; fi
 
+# ─── 6. Create a normal user & login for download tests ───
+USER_EMAIL="donwloadtest@example.com"
+USER_PASS="secret123"
+R=$(curl -s -X POST "$BASE/api/auth/register" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"Downloader\",\"email\":\"$USER_EMAIL\",\"password\":\"$USER_PASS\"}")
+if echo "$R" | grep -q 'Registration successful'; then green "User registration"; else red "User registration → $R"; fi
+
+LOG=$(curl -s -X POST "$BASE/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"$USER_EMAIL\",\"password\":\"$USER_PASS\"}")
+TOKEN=$(echo "$LOG" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+if [ -n "$TOKEN" ]; then green "User login"; else red "User login failed → $LOG"; fi
+
 # ─── 6. Get Products (Public) ───
 echo ""
 echo "── Product Read ──"
@@ -101,6 +115,7 @@ echo ""
 echo "── Order APIs ──"
 R=$(curl -s -X POST "$BASE/api/orders" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d "{\"product_id\":\"$PRODUCT_ID\",\"buyer_email\":\"testbuyer@gmail.com\"}")
 check "POST /api/orders (create)" "$R"
 ORDER_ID=$(echo "$R" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
@@ -117,12 +132,15 @@ R=$(curl -s "$BASE/api/orders/$ORDER_ID")
 check "GET /api/orders/:id" "$R"
 
 # ─── 12. Get Orders by Email ───
-R=$(curl -s "$BASE/api/orders/email/testbuyer@gmail.com")
-check "GET /api/orders/email/:email" "$R"
+# should only be allowed for logged-in user and matching email
+R=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/orders/email/$USER_EMAIL")
+check "GET /api/orders/email/own" "$R"
 
-# ─── 13. Download (should fail - not paid) ───
-R=$(curl -s "$BASE/api/orders/$ORDER_ID/download?email=testbuyer@gmail.com")
-if echo "$R" | grep -q 'Payment not completed'; then green "Download blocked (unpaid)"; else red "Download check → $R"; fi
+# request for another email should be blocked
+R=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/orders/email/testbuyer@gmail.com")
+if echo "$R" | grep -q 'Forbidden'; then green "GET /api/orders/email/other blocked"; else red "Email restriction failed → $R"; fi
+
+# (download tests moved later in script)
 
 # ─── 14. Admin Orders ───
 echo ""
@@ -138,6 +156,7 @@ echo ""
 echo "── Payment APIs ──"
 R=$(curl -s -X POST "$BASE/api/payments/create" \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
   -d "{\"product_id\":\"$PRODUCT_ID\",\"buyer_email\":\"paytest@gmail.com\",\"buyer_name\":\"Test User\",\"buyer_phone\":\"9876543210\"}")
 if echo "$R" | grep -q '"success":true'; then
   green "POST /api/payments/create"
@@ -156,7 +175,28 @@ if [ -n "$CF_ORDER_ID" ]; then
   if echo "$R" | grep -q 'success'; then green "GET /api/payments/verify/:id"; else red "Payment verify → $R"; fi
 fi
 
-# ─── 17. Admin Dashboard ───
+# ─── 17. Download workflow using secure endpoint (post-payment) ───
+# 1) try without token -> still denied
+R=$(curl -s "$BASE/api/download?productId=$PRODUCT_ID")
+if echo "$R" | grep -q 'Access denied'; then green "Download blocked (no auth)"; else red "Auth check → $R"; fi
+
+# 2) with token now that order has been marked PAID
+R=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/download?productId=$PRODUCT_ID")
+if echo "$R" | grep -q 'download_url'; then
+  green "Paid download succeeded (first)"
+else
+  red "Paid download failed → $R"
+fi
+
+# 3) second hit should trigger limit
+R=$(curl -s -H "Authorization: Bearer $TOKEN" "$BASE/api/download?productId=$PRODUCT_ID")
+if echo "$R" | grep -q 'Download limit exceeded'; then
+  green "Second download blocked (limit reached)"
+else
+  red "Limit enforcement failed → $R"
+fi
+
+# ─── 18. Admin Dashboard ───
 echo ""
 echo "── Admin Dashboard ──"
 R=$(curl -s "$BASE/api/admin/dashboard" -H "x-admin-api-key: $ADMIN_KEY")

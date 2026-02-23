@@ -43,6 +43,7 @@ export const createPayment = async (req, res) => {
       product_id,
       buyer_email,
       cashfree_order_id: cashfreeOrderId,
+      user_id: req.user && req.user.id,
     });
 
     // Create Cashfree order (provide urls based on request in case env vars not set)

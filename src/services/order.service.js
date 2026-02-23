@@ -13,17 +13,20 @@ const normalizeOrder = (o) => {
 /**
  * Create a new order
  */
-export const createOrder = async ({ product_id, buyer_email, cashfree_order_id }) => {
+export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, user_id = null }) => {
+  const payload = {
+    product_id,
+    buyer_email,
+    payment_status: "PENDING",
+    cashfree_order_id: cashfree_order_id || null,
+    downloads_used: 0,
+    max_downloads: 1,
+  };
+  if (user_id) payload.user_id = user_id;
+
   const { data, error } = await supabase
     .from("orders")
-    .insert([
-      {
-        product_id,
-        buyer_email,
-        payment_status: "PENDING",
-        cashfree_order_id: cashfree_order_id || null,
-      },
-    ])
+    .insert([payload])
     .select()
     .single();
 
@@ -55,6 +58,44 @@ export const getOrderByCashfreeId = async (cashfree_order_id) => {
     .eq("cashfree_order_id", cashfree_order_id)
     .single();
 
+  if (error) throw new Error(error.message);
+  return normalizeOrder(data);
+};
+
+/**
+ * Fetch a paid order belonging to a user for a specific product.
+ * Returns null if not found. */
+export const getPaidOrderForUserProduct = async (user_id, product_id) => {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("*, products(*)")
+    .eq("user_id", user_id)
+    .eq("product_id", product_id)
+    .eq("payment_status", "PAID")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  return normalizeOrder(data);
+};
+
+/**
+ * Increment the downloads_used counter for an order
+ */
+export const incrementDownloads = async (order_id) => {
+  // read current value then update
+  const { data: order, error: e1 } = await supabase
+    .from("orders")
+    .select("downloads_used")
+    .eq("id", order_id)
+    .single();
+  if (e1) throw new Error(e1.message);
+  const newCount = (order.downloads_used || 0) + 1;
+  const { data, error } = await supabase
+    .from("orders")
+    .update({ downloads_used: newCount })
+    .eq("id", order_id)
+    .select()
+    .single();
   if (error) throw new Error(error.message);
   return normalizeOrder(data);
 };

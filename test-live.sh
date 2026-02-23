@@ -69,7 +69,21 @@ R=$(curl -s -m $TIMEOUT -X POST "$BASE/api/products" \
 check "POST /api/products (create #2)" "$R"
 PRODUCT_ID_2=$(echo "$R" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 
-# ─── 5. Validation ───
+# ─── 5. Register & login user for auth tests ───
+USER_EMAIL="livetestuser@example.com"
+USER_PASS="pass1234"
+R=$(curl -s -m $TIMEOUT -X POST "$BASE/api/auth/register" \
+  -H "Content-Type: application/json" \
+  -d "{\"name\":\"Live Tester\",\"email\":\"$USER_EMAIL\",\"password\":\"$USER_PASS\"}")
+if echo "$R" | grep -q 'Registration successful'; then green "User registration"; else red "User registration → $R"; fi
+
+LOG=$(curl -s -m $TIMEOUT -X POST "$BASE/api/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"$USER_EMAIL\",\"password\":\"$USER_PASS\"}")
+TOKEN=$(echo "$LOG" | grep -o '"token":"[^\"]*"' | cut -d'"' -f4)
+if [ -n "$TOKEN" ]; then green "User login"; else red "User login failed → $LOG"; fi
+
+# ─── 6. Validation ───
 R=$(curl -s -m $TIMEOUT -X POST "$BASE/api/products" \
   -H "Content-Type: application/json" \
   -H "x-admin-api-key: $ADMIN_KEY" \
@@ -104,8 +118,7 @@ echo ""
 echo "── Order APIs ──"
 if [ -n "$PRODUCT_ID" ]; then
   R=$(curl -s -m $TIMEOUT -X POST "$BASE/api/orders" \
-    -H "Content-Type: application/json" \
-    -d "{\"product_id\":\"$PRODUCT_ID\",\"buyer_email\":\"testbuyer@gmail.com\"}")
+    -H "Content-Type: application/json" \    -H "Authorization: Bearer $TOKEN" \    -d "{\"product_id\":\"$PRODUCT_ID\",\"buyer_email\":\"testbuyer@gmail.com\"}")
   check "POST /api/orders (create)" "$R"
   ORDER_ID=$(echo "$R" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
   echo "   → Order ID: $ORDER_ID"
@@ -115,6 +128,7 @@ fi
 if [ -n "$PRODUCT_ID" ]; then
   R=$(curl -s -m $TIMEOUT -X POST "$BASE/api/orders" \
     -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
     -d '{"product_id":"'"$PRODUCT_ID"'","buyer_email":"not-an-email"}')
   if echo "$R" | grep -q 'Invalid email'; then green "Validation: invalid email"; else red "Email validation → $R"; fi
 fi
@@ -124,11 +138,11 @@ if [ -n "$ORDER_ID" ]; then
   R=$(curl -s -m $TIMEOUT "$BASE/api/orders/$ORDER_ID")
   check "GET /api/orders/:id" "$R"
 
-  R=$(curl -s -m $TIMEOUT "$BASE/api/orders/email/testbuyer@gmail.com")
-  check "GET /api/orders/email/:email" "$R"
+  R=$(curl -s -m $TIMEOUT -H "Authorization: Bearer $TOKEN" "$BASE/api/orders/email/$USER_EMAIL")
+  check "GET /api/orders/email/own" "$R"
 
-  R=$(curl -s -m $TIMEOUT "$BASE/api/orders/$ORDER_ID/download?email=testbuyer@gmail.com")
-  if echo "$R" | grep -q 'Payment not completed'; then green "Download blocked (unpaid)"; else red "Download check → $R"; fi
+  R=$(curl -s -m $TIMEOUT "$BASE/api/download?productId=$PRODUCT_ID")
+  if echo "$R" | grep -q 'Payment not completed\|Access denied'; then green "Download blocked (unpaid or unauthenticated)"; else red "Download check → $R"; fi
 fi
 
 # ─── 11. Admin Orders ───
@@ -146,6 +160,7 @@ echo "── Payment APIs ──"
 if [ -n "$PRODUCT_ID" ]; then
   R=$(curl -s -m $TIMEOUT -X POST "$BASE/api/payments/create" \
     -H "Content-Type: application/json" \
+    -H "Authorization: Bearer $TOKEN" \
     -d "{\"product_id\":\"$PRODUCT_ID\",\"buyer_email\":\"paytest@gmail.com\",\"buyer_name\":\"Test User\",\"buyer_phone\":\"9876543210\"}")
   if echo "$R" | grep -q '"success":true'; then
     green "POST /api/payments/create"

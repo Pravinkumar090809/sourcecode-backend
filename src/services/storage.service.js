@@ -31,7 +31,8 @@ export const uploadZipFile = async (fileBuffer, fileName) => {
  * @param {number} expiresIn - seconds (default 1 hour)
  * @returns {Promise<string>}
  */
-export const getSignedDownloadUrl = async (zipPath, expiresIn = 3600) => {
+export const getSignedDownloadUrl = async (zipPath, expiresIn = 600) => {
+  // default to 10 minutes (600s) to satisfy security requirement
   const { data, error } = await supabase.storage
     .from(BUCKET_NAME)
     .createSignedUrl(zipPath, expiresIn);

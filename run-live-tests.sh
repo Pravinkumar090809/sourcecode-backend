@@ -189,13 +189,13 @@ echo ""
 
 # ━━━━━━━━━━━ TEST 16: Download without payment → fail ━━━━━━━━━━━
 TOTAL=$((TOTAL+1))
-echo "TEST $TOTAL: GET /api/orders/$ORDER_ID/download (unpaid → fail)"
-if [ -n "$ORDER_ID" ]; then
-  R=$(curl -s -m 30 "$BASE/api/orders/$ORDER_ID/download?email=test@livetest.com")
+echo "TEST $TOTAL: GET /api/download?productId=$PRODUCT_ID (unpaid → fail)"
+if [ -n "$PRODUCT_ID" ]; then
+  R=$(curl -s -m 30 "$BASE/api/download?productId=$PRODUCT_ID")
   echo "  $R"
-  echo "$R" | grep -q '"success":false\|not completed\|Payment' && pass || fail
+  echo "$R" | grep -q '"success":false\|Access denied\|Payment' && pass || fail
 else
-  echo "  Skipped (no order)"; fail
+  echo "  Skipped (no product)"; fail
 fi
 echo ""
 

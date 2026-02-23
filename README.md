@@ -30,7 +30,8 @@ npm start
 | POST | `/api/orders` | Create order |
 | GET | `/api/orders/:id` | Get order by ID |
 | GET | `/api/orders/email/:email` | Get orders by email |
-| GET | `/api/orders/:id/download?email=` | Download ZIP (paid only) |
+| GET | `/api/orders/:id/download` | Download ZIP (paid only, authenticated)
+| GET | `/api/download?productId=<id>` | Download ZIP via product ID (authenticated, preferred) |
 | POST | `/api/payments/create` | Initiate payment |
 | GET | `/api/payments/verify/:cashfreeOrderId` | Verify payment |
 | POST | `/api/payments/webhook` | Cashfree webhook |
@@ -61,6 +62,22 @@ x-admin-api-key: your-secret-key
 ## 🗄 Database
 
 Run the SQL in `database/setup.sql` in your Supabase SQL Editor.
+
+> **Important:** the orders table now includes
+> `user_id UUID REFERENCES users(id)` (linked to the
+> authenticated buyer) as well as
+> `downloads_used INTEGER DEFAULT 0 NOT NULL` and
+> `max_downloads INTEGER DEFAULT 1 NOT NULL` to enforce
+> per-order download limits. If you already have an
+> existing database, run the following SQL:
+> ```sql
+> ALTER TABLE orders
+>   ADD COLUMN IF NOT EXISTS user_id UUID REFERENCES users(id),
+>   ADD COLUMN IF NOT EXISTS downloads_used INTEGER DEFAULT 0 NOT NULL,
+>   ADD COLUMN IF NOT EXISTS max_downloads INTEGER DEFAULT 1 NOT NULL;
+> ```
+> These fields are automatically populated when new
+> orders are created from an authenticated session.
 
 ## 🌐 Deploy (Render)
 
