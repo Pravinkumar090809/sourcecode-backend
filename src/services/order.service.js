@@ -56,12 +56,13 @@ export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, 
     const msg = String(err1.message);
     if (!isColumnError(msg)) throw err1;
     console.warn("createOrder attempt-1 failed (column missing):", msg);
-    // remove missing coupon/discount fields if referenced
+    // remove missing fields for future attempts
     if (msg.includes("coupon_code")) includeCoupon = false;
     if (msg.includes("discount_amount")) includeDiscount = false;
+    if (msg.includes("user_id")) user_id = null; // actually we keep it for now
   }
 
-  // ── attempt 2: without download counters but keep user_id ──
+  // ── attempt 2: without download counters ──
   const midPayload = {
     product_id,
     buyer_email,
@@ -75,22 +76,39 @@ export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, 
   try {
     return await doInsert(midPayload);
   } catch (err2) {
-    if (!isColumnError(String(err2.message))) throw err2;
-    console.warn("createOrder attempt-2 failed (column missing):", err2.message);
+    const msg = String(err2.message);
+    if (!isColumnError(msg)) throw err2;
+    console.warn("createOrder attempt-2 failed (column missing):", msg);
+    if (msg.includes("coupon_code")) includeCoupon = false;
+    if (msg.includes("discount_amount")) includeDiscount = false;
   }
 
-  // ── attempt 3: absolute minimum (no user_id, no download cols) ──
+  // ── attempt 3: absolute minimum (no user_id, no extra cols) ──
   const minPayload = {
     product_id,
     buyer_email,
     payment_status: "PENDING",
     cashfree_order_id: cashfree_order_id || null,
   };
+  // ONLY include if they haven't failed yet
   if (includeCoupon) minPayload.coupon_code = coupon_code;
   if (includeDiscount) minPayload.discount_amount = discount_amount;
 
-  console.warn("createOrder attempt-3: minimal payload");
-  return await doInsert(minPayload);
+  console.warn("createOrder attempt-3: minimal payload", { includeCoupon, includeDiscount });
+  try {
+    return await doInsert(minPayload);
+  } catch (err3) {
+    const msg = String(err3.message);
+    if (!isColumnError(msg)) throw err3;
+    // final attempt: strip EVERY optional field
+    console.warn("createOrder final fallback: stripping all optional fields");
+    return await doInsert({
+      product_id,
+      buyer_email,
+      payment_status: "PENDING",
+      cashfree_order_id: cashfree_order_id || null,
+    });
+  }
 };
 
 /**
