@@ -49,7 +49,11 @@ export const createOrder = async (req, res) => {
     });
 
     if (coupon) {
-      await incrementCouponUse(coupon.id);
+      try {
+        await incrementCouponUse(coupon.id);
+      } catch (e) {
+        console.warn("Failed to increment coupon use:", e.message);
+      }
     }
 
     return sendSuccess(res, order, "Order created successfully", 201);

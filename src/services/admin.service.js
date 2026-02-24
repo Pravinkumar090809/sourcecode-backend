@@ -80,15 +80,48 @@ export const getCouponByCode = async (code) => {
 };
 
 // increment usage counter, returns updated coupon
+// This function used to rely on `supabase.raw` to perform an SQL expression
+// update, but the v2 client no longer exposes that helper (hence the
+// "supabase.raw is not a function" runtime error).  We now perform a
+// two‑step read/write and gracefully handle the case where the
+// `uses` column is missing (older schemas).
 export const incrementCouponUse = async (id) => {
-  const { data, error } = await supabase
-    .from("coupons")
-    .update({ uses: supabase.raw("uses + 1") })
-    .eq("id", id)
-    .select()
-    .single();
-  if (error) throw new Error(error.message);
-  return data;
+  try {
+    // read current value first
+    const { data: coupon, error: readErr } = await supabase
+      .from("coupons")
+      .select("uses")
+      .eq("id", id)
+      .single();
+    if (readErr) throw new Error(readErr.message);
+
+    const newUses = (coupon?.uses || 0) + 1;
+    const { data, error } = await supabase
+      .from("coupons")
+      .update({ uses: newUses })
+      .eq("id", id)
+      .select()
+      .single();
+    if (error) throw new Error(error.message);
+    return data;
+  } catch (err) {
+    const m = String(err.message || "");
+    if (
+      m.includes("Could not find") ||
+      m.includes("column") ||
+      m.includes("schema cache") ||
+      m.includes("uses")
+    ) {
+      console.warn("incrementCouponUse skipped – column missing:", err.message);
+      try {
+        const { data } = await supabase.from("coupons").select("*").eq("id", id).single();
+        return data;
+      } catch (_) {
+        return null;
+      }
+    }
+    throw err;
+  }
 };
 
 // ═══════════════════════════════════════════

@@ -65,7 +65,12 @@ export const createPayment = async (req, res) => {
     });
 
     if (coupon) {
-      await incrementCouponUse(coupon.id);
+      try {
+        await incrementCouponUse(coupon.id);
+      } catch (e) {
+        // don't block the payment flow if the coupon counter fails
+        console.warn("Failed to increment coupon use:", e.message);
+      }
     }
 
     // Create Cashfree order (provide urls based on request in case env vars not set)
