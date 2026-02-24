@@ -1,7 +1,7 @@
 import * as orderService from "../services/order.service.js";
 import * as storageService from "../services/storage.service.js";
 import * as productService from "../services/product.service.js";
-import * as adminService from "../services/admin.service.js";
+import { getCouponByCode, incrementCouponUse } from "../services/admin.service.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 
 /**
@@ -25,7 +25,7 @@ export const createOrder = async (req, res) => {
     let coupon = null;
     if (coupon_code) {
       coupon_code = coupon_code.trim().toUpperCase();
-      coupon = await adminService.getCouponByCode(coupon_code);
+      coupon = await getCouponByCode(coupon_code);
       if (!coupon) return sendError(res, "Coupon not found", 404);
       if (!coupon.active) return sendError(res, "Coupon is inactive", 400);
       if (coupon.expiry && new Date(coupon.expiry) < new Date()) return sendError(res, "Coupon expired", 400);
@@ -49,7 +49,7 @@ export const createOrder = async (req, res) => {
     });
 
     if (coupon) {
-      await adminService.incrementCouponUse(coupon.id);
+      await incrementCouponUse(coupon.id);
     }
 
     return sendSuccess(res, order, "Order created successfully", 201);

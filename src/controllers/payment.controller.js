@@ -1,7 +1,7 @@
 import * as paymentService from "../services/payment.service.js";
 import * as orderService from "../services/order.service.js";
 import * as productService from "../services/product.service.js";
-import * as adminService from "../services/admin.service.js";
+import { getCouponByCode, incrementCouponUse } from "../services/admin.service.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { v4 as uuidv4 } from "uuid";
 
@@ -40,7 +40,7 @@ export const createPayment = async (req, res) => {
     let discount = 0;
     let coupon = null;
     if (coupon_code) {
-      coupon = await adminService.getCouponByCode(coupon_code.trim().toUpperCase());
+      coupon = await getCouponByCode(coupon_code.trim().toUpperCase());
       if (!coupon) return sendError(res, "Coupon not found", 404);
       if (!coupon.active) return sendError(res, "Coupon inactive", 400);
       if (coupon.expiry && new Date(coupon.expiry) < new Date()) return sendError(res, "Coupon expired", 400);
@@ -65,7 +65,7 @@ export const createPayment = async (req, res) => {
     });
 
     if (coupon) {
-      await adminService.incrementCouponUse(coupon.id);
+      await incrementCouponUse(coupon.id);
     }
 
     // Create Cashfree order (provide urls based on request in case env vars not set)
