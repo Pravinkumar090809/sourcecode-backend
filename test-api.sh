@@ -215,6 +215,14 @@ echo "── Delete Tests ──"
 R=$(curl -s -X DELETE "$BASE/api/products/$PRODUCT_ID_2" -H "x-admin-api-key: $ADMIN_KEY")
 check "DELETE /api/products/:id (soft delete)" "$R"
 
+# verify flag changed by fetching admin list and checking is_active
+R=$(curl -s "$BASE/api/products/admin/all" -H "x-admin-api-key: $ADMIN_KEY")
+if echo "$R" | grep -q '"id":"'$PRODUCT_ID_2'"' && echo "$R" | grep -A1 '"id":"'$PRODUCT_ID_2'"' | grep -q '"is_active":false'; then
+  green "Soft delete reflected in DB (is_active=false)"
+else
+  red "Soft delete not reflected in DB → $R"
+fi
+
 # ─── 19. Hard Delete ───
 R=$(curl -s -X DELETE "$BASE/api/products/$PRODUCT_ID_2/permanent" -H "x-admin-api-key: $ADMIN_KEY")
 check "DELETE /api/products/:id/permanent (hard delete)" "$R"
