@@ -9,6 +9,10 @@ import { v4 as uuidv4 } from "uuid";
  * POST /api/payments/create — Initiate payment for a product
  *
  * Body: { product_id, buyer_email, buyer_name?, buyer_phone? }
+ *
+ * This endpoint is public; authentication is NOT required.  Order records
+ * no longer track `user_id` to avoid foreign-key errors when customers
+ * sign in through a different auth system or remain anonymous.
  */
 export const createPayment = async (req, res) => {
   try {
@@ -59,18 +63,12 @@ export const createPayment = async (req, res) => {
       product_id,
       buyer_email,
       cashfree_order_id: cashfreeOrderId,
-      user_id: req.user && req.user.id,
       coupon_code: coupon ? coupon.code : null,
       discount_amount: discount,
     });
 
     if (coupon) {
-      try {
-        await incrementCouponUse(coupon.id);
-      } catch (e) {
-        // don't block the payment flow if the coupon counter fails
-        console.warn("Failed to increment coupon use:", e.message);
-      }
+      await incrementCouponUse(coupon.id);
     }
 
     // Create Cashfree order (provide urls based on request in case env vars not set)

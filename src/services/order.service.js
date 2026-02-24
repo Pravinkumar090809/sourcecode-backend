@@ -1,6 +1,17 @@
 import supabase from "../config/supabase.js";
 
 // convert status fields to lowercase so front-end comparisons are case-insensitive
+// helper to identify schema-related errors
+const isColumnError = (msg) =>
+  msg.includes("Could not find") ||
+  msg.includes("column") ||
+  msg.includes("schema cache");
+
+// treat foreign-key violations on user_id as a special case we can recover from
+const isUserFKError = (msg) =>
+  msg.toLowerCase().includes("violates foreign key") && msg.toLowerCase().includes("user_id");
+
+// convert status fields to lowercase so front-end comparisons are case-insensitive
 const normalizeOrder = (o) => {
   if (!o) return o;
   return {
@@ -31,11 +42,6 @@ export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, 
   let includeCoupon = coupon_code != null;
   let includeDiscount = discount_amount !== 0;
 
-  const isColumnError = (msg) =>
-    msg.includes("Could not find") ||
-    msg.includes("column") ||
-    msg.includes("schema cache");
-
   // ── attempt 1: full payload (all optional columns) ──
   const fullPayload = {
     product_id,
@@ -54,6 +60,21 @@ export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, 
     return await doInsert(fullPayload);
   } catch (err1) {
     const msg = String(err1.message);
+    // if the failure was due to a missing/invalid user_id foreign key, drop it and retry
+    if (isUserFKError(msg)) {
+      console.warn("createOrder attempt-1 failed (user_id foreign key):", msg);
+      user_id = null;
+      delete fullPayload.user_id;
+      try {
+        return await doInsert(fullPayload);
+      } catch (retryErr) {
+        const msg2 = String(retryErr.message);
+        if (!isColumnError(msg2)) throw retryErr;
+        console.warn("createOrder attempt-1 retry failed (column missing):", msg2);
+        if (msg2.includes("coupon_code")) includeCoupon = false;
+        if (msg2.includes("discount_amount")) includeDiscount = false;
+      }
+    }
     if (!isColumnError(msg)) throw err1;
     console.warn("createOrder attempt-1 failed (column missing):", msg);
     // remove missing fields for future attempts
@@ -77,6 +98,20 @@ export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, 
     return await doInsert(midPayload);
   } catch (err2) {
     const msg = String(err2.message);
+    if (isUserFKError(msg)) {
+      console.warn("createOrder attempt-2 failed (user_id foreign key):", msg);
+      user_id = null;
+      delete midPayload.user_id;
+      try {
+        return await doInsert(midPayload);
+      } catch (retryErr) {
+        const msg2 = String(retryErr.message);
+        if (!isColumnError(msg2)) throw retryErr;
+        console.warn("createOrder attempt-2 retry failed (column missing):", msg2);
+        if (msg2.includes("coupon_code")) includeCoupon = false;
+        if (msg2.includes("discount_amount")) includeDiscount = false;
+      }
+    }
     if (!isColumnError(msg)) throw err2;
     console.warn("createOrder attempt-2 failed (column missing):", msg);
     if (msg.includes("coupon_code")) includeCoupon = false;

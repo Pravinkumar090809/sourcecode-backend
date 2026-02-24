@@ -9,7 +9,7 @@ const router = express.Router();
  * @desc    Create a new payment order
  * @access  Public
  */
-router.post("/create", userAuth, paymentController.createPayment);
+router.post("/create", paymentController.createPayment);
 
 /**
  * @route   GET /api/payments/verify/:cashfreeOrderId

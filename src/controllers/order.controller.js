@@ -44,7 +44,6 @@ export const createOrder = async (req, res) => {
     const order = await orderService.createOrder({
       product_id,
       buyer_email,
-      user_id: req.user && req.user.id,
       coupon_code: coupon ? coupon.code : null,
       discount_amount: discount,
     });
