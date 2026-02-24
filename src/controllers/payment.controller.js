@@ -1,6 +1,7 @@
 import * as paymentService from "../services/payment.service.js";
 import * as orderService from "../services/order.service.js";
 import * as productService from "../services/product.service.js";
+import * as adminService from "../services/admin.service.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { v4 as uuidv4 } from "uuid";
 
@@ -53,6 +54,7 @@ export const createPayment = async (req, res) => {
     const cashfreeOrderId = `CF_${Date.now()}_${uuidv4().slice(0, 8)}`;
 
     // Create order in DB
+    console.log('creating order with coupon', coupon_code, 'discount', discount);
     const order = await orderService.createOrder({
       product_id,
       buyer_email,
