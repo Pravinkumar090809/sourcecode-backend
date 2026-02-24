@@ -220,6 +220,25 @@ router.patch("/coupons/:id/toggle", adminAuth, async (req, res) => {
   }
 });
 
+// validation for public use (no auth required)
+router.get("/coupons/validate", async (req, res) => {
+  try {
+    const { code } = req.query;
+    if (!code) return sendError(res, "coupon code is required", 400);
+    const coupon = await adminService.getCouponByCode(code);
+    if (!coupon) return sendError(res, "Coupon not found", 404);
+
+    // simple validations
+    if (!coupon.active) return sendError(res, "Coupon is inactive", 400);
+    if (coupon.expiry && new Date(coupon.expiry) < new Date()) return sendError(res, "Coupon expired", 400);
+    if (coupon.max_uses && coupon.uses >= coupon.max_uses) return sendError(res, "Coupon use limit reached", 400);
+
+    return sendSuccess(res, coupon, "Coupon valid");
+  } catch (error) {
+    return sendError(res, "Failed to validate coupon", 500, error.message);
+  }
+});
+
 // ═══════════════════════════════════════════
 // REFUNDS
 // ═══════════════════════════════════════════

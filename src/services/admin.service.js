@@ -67,6 +67,30 @@ export const toggleCoupon = async (id, active) => {
   return data;
 };
 
+// lookup a coupon by code (case insensitive)
+export const getCouponByCode = async (code) => {
+  const { data, error } = await supabase
+    .from("coupons")
+    .select("*")
+    .ilike("code", code)
+    .limit(1)
+    .single();
+  if (error && error.code !== "PGRST116") throw new Error(error.message);
+  return data;
+};
+
+// increment usage counter, returns updated coupon
+export const incrementCouponUse = async (id) => {
+  const { data, error } = await supabase
+    .from("coupons")
+    .update({ uses: supabase.raw("uses + 1") })
+    .eq("id", id)
+    .select()
+    .single();
+  if (error) throw new Error(error.message);
+  return data;
+};
+
 // ═══════════════════════════════════════════
 // REFUNDS
 // ═══════════════════════════════════════════

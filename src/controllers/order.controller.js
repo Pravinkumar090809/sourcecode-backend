@@ -9,7 +9,7 @@ import { sendSuccess, sendError } from "../utils/response.js";
  */
 export const createOrder = async (req, res) => {
   try {
-    const { product_id, buyer_email } = req.body;
+    let { product_id, buyer_email, coupon_code } = req.body;
 
     if (!product_id || !buyer_email) {
       return sendError(res, "product_id and buyer_email are required", 400);
@@ -21,7 +21,37 @@ export const createOrder = async (req, res) => {
       return sendError(res, "Invalid email address", 400);
     }
 
-    const order = await orderService.createOrder({ product_id, buyer_email, user_id: req.user && req.user.id });
+    let discount = 0;
+    let coupon = null;
+    if (coupon_code) {
+      coupon_code = coupon_code.trim().toUpperCase();
+      coupon = await adminService.getCouponByCode(coupon_code);
+      if (!coupon) return sendError(res, "Coupon not found", 404);
+      if (!coupon.active) return sendError(res, "Coupon is inactive", 400);
+      if (coupon.expiry && new Date(coupon.expiry) < new Date()) return sendError(res, "Coupon expired", 400);
+      if (coupon.max_uses && coupon.uses >= coupon.max_uses) return sendError(res, "Coupon use limit reached", 400);
+
+      // product price lookup
+      const product = await productService.getProductById(product_id);
+      const price = product?.price || 0;
+      if (coupon.type === "percent") discount = Math.round((price * (coupon.discount || 0)) / 100);
+      else discount = coupon.discount || 0;
+      // clamp
+      if (discount > price) discount = price;
+    }
+
+    const order = await orderService.createOrder({
+      product_id,
+      buyer_email,
+      user_id: req.user && req.user.id,
+      coupon_code: coupon ? coupon.code : null,
+      discount_amount: discount,
+    });
+
+    if (coupon) {
+      await adminService.incrementCouponUse(coupon.id);
+    }
+
     return sendSuccess(res, order, "Order created successfully", 201);
   } catch (error) {
     console.error("💥 createOrder error:", error.message);

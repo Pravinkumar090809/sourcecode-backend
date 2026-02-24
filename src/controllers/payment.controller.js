@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from "uuid";
  */
 export const createPayment = async (req, res) => {
   try {
-    const { product_id, buyer_email, buyer_name, buyer_phone } = req.body;
+    const { product_id, buyer_email, buyer_name, buyer_phone, coupon_code } = req.body;
 
     if (!product_id || !buyer_email) {
       return sendError(res, "product_id and buyer_email are required", 400);
@@ -35,6 +35,20 @@ export const createPayment = async (req, res) => {
       return sendError(res, "Product not found or inactive", 404);
     }
 
+    // compute discount if coupon provided
+    let discount = 0;
+    let coupon = null;
+    if (coupon_code) {
+      coupon = await adminService.getCouponByCode(coupon_code.trim().toUpperCase());
+      if (!coupon) return sendError(res, "Coupon not found", 404);
+      if (!coupon.active) return sendError(res, "Coupon inactive", 400);
+      if (coupon.expiry && new Date(coupon.expiry) < new Date()) return sendError(res, "Coupon expired", 400);
+      if (coupon.max_uses && coupon.uses >= coupon.max_uses) return sendError(res, "Coupon use limit reached", 400);
+      if (coupon.type === "percent") discount = Math.round((product.price * (coupon.discount || 0)) / 100);
+      else discount = coupon.discount || 0;
+      if (discount > product.price) discount = product.price;
+    }
+
     // Generate unique order ID for Cashfree
     const cashfreeOrderId = `CF_${Date.now()}_${uuidv4().slice(0, 8)}`;
 
@@ -44,7 +58,13 @@ export const createPayment = async (req, res) => {
       buyer_email,
       cashfree_order_id: cashfreeOrderId,
       user_id: req.user && req.user.id,
+      coupon_code: coupon ? coupon.code : null,
+      discount_amount: discount,
     });
+
+    if (coupon) {
+      await adminService.incrementCouponUse(coupon.id);
+    }
 
     // Create Cashfree order (provide urls based on request in case env vars not set)
     const backendBase = `${req.protocol}://${req.get("host")}`;
@@ -55,7 +75,7 @@ export const createPayment = async (req, res) => {
 
     const cashfreeOrder = await paymentService.createCashfreeOrder({
       orderId: cashfreeOrderId,
-      amount: product.price,
+      amount: product.price - discount,
       customerEmail: buyer_email,
       customerPhone: buyer_phone,
       customerName: buyer_name,

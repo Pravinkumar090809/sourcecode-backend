@@ -17,7 +17,7 @@ const normalizeOrder = (o) => {
  * optional columns (user_id, downloads_used, max_downloads) are missing
  * from the live database.
  */
-export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, user_id = null }) => {
+export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, user_id = null, coupon_code = null, discount_amount = 0 }) => {
   const doInsert = async (p) => {
     const { data, error } = await supabase
       .from("orders")
@@ -27,6 +27,9 @@ export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, 
     if (error) throw new Error(error.message);
     return data;
   };
+  // controls for optional columns
+  let includeCoupon = coupon_code != null;
+  let includeDiscount = discount_amount !== 0;
 
   const isColumnError = (msg) =>
     msg.includes("Could not find") ||
@@ -43,12 +46,19 @@ export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, 
   if (user_id) fullPayload.user_id = user_id;
   fullPayload.downloads_used = 0;
   fullPayload.max_downloads = 1;
+  // include optional coupon info if available
+  if (includeCoupon) fullPayload.coupon_code = coupon_code;
+  if (includeDiscount) fullPayload.discount_amount = discount_amount;
 
   try {
     return await doInsert(fullPayload);
   } catch (err1) {
-    if (!isColumnError(String(err1.message))) throw err1;
-    console.warn("createOrder attempt-1 failed (column missing):", err1.message);
+    const msg = String(err1.message);
+    if (!isColumnError(msg)) throw err1;
+    console.warn("createOrder attempt-1 failed (column missing):", msg);
+    // remove missing coupon/discount fields if referenced
+    if (msg.includes("coupon_code")) includeCoupon = false;
+    if (msg.includes("discount_amount")) includeDiscount = false;
   }
 
   // ── attempt 2: without download counters but keep user_id ──
@@ -59,6 +69,8 @@ export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, 
     cashfree_order_id: cashfree_order_id || null,
   };
   if (user_id) midPayload.user_id = user_id;
+  if (includeCoupon) midPayload.coupon_code = coupon_code;
+  if (includeDiscount) midPayload.discount_amount = discount_amount;
 
   try {
     return await doInsert(midPayload);
@@ -74,6 +86,8 @@ export const createOrder = async ({ product_id, buyer_email, cashfree_order_id, 
     payment_status: "PENDING",
     cashfree_order_id: cashfree_order_id || null,
   };
+  if (includeCoupon) minPayload.coupon_code = coupon_code;
+  if (includeDiscount) minPayload.discount_amount = discount_amount;
 
   console.warn("createOrder attempt-3: minimal payload");
   return await doInsert(minPayload);

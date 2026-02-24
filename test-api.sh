@@ -121,6 +121,26 @@ check "POST /api/orders (create)" "$R"
 ORDER_ID=$(echo "$R" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 echo "   → Order ID: $ORDER_ID"
 
+# ─── 9b. Coupon tests ───
+COUPON_CODE="TESTCOUP"
+# create coupon as admin
+R=$(curl -s -X POST "$BASE/api/admin/coupons" \
+  -H "Content-Type: application/json" \
+  -H "x-admin-api-key: $ADMIN_KEY" \
+  -d "{\"code\":\"$COUPON_CODE\",\"discount\":20,\"type\":\"percent\"}")
+if echo "$R" | grep -q 'Coupon created'; then green "Admin coupon created"; else red "Coupon create → $R"; fi
+
+# validate coupon
+R=$(curl -s "$BASE/api/admin/coupons/validate?code=$COUPON_CODE")
+if echo "$R" | grep -q 'Coupon valid'; then green "Coupon validation endpoint"; else red "Coupon validation → $R"; fi
+
+# create order using coupon with token
+R=$(curl -s -X POST "$BASE/api/orders" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{\"product_id\":\"$PRODUCT_ID\",\"buyer_email\":\"testbuyer@gmail.com\",\"coupon_code\":\"$COUPON_CODE\"}")
+if echo "$R" | grep -q '"discount_amount"'; then green "Order with coupon created"; else red "Order with coupon → $R"; fi
+
 # ─── 10. Email validation ───
 R=$(curl -s -X POST "$BASE/api/orders" \
   -H "Content-Type: application/json" \
