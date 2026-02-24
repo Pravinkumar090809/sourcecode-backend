@@ -1,6 +1,7 @@
 import * as orderService from "../services/order.service.js";
 import * as storageService from "../services/storage.service.js";
 import * as productService from "../services/product.service.js";
+import * as adminService from "../services/admin.service.js"; // ✅ ADD THIS
 import { getCouponByCode, incrementCouponUse } from "../services/admin.service.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 
@@ -165,7 +166,7 @@ export const downloadByProduct = async (req, res) => {
 
     // increment and log
     await orderService.incrementDownloads(order.id);
-    await adminService.logDownload({
+    await adminService.logDownload({ // ✅ NOW THIS WILL WORK
       user_email: req.user.email || "",
       user_name: req.user.name || "",
       product_id: productId,
@@ -187,7 +188,8 @@ export const downloadByProduct = async (req, res) => {
     const msg = String(error.message || "").toLowerCase();
     if (msg.includes("not found") || msg.includes("no such file")) {
       return sendError(res, "File not found in storage", 404, error.message);
-    }    return sendError(res, "Failed to generate download link", 500, error.message);
+    }
+    return sendError(res, "Failed to generate download link", 500, error.message);
   }
 };
 
@@ -195,7 +197,6 @@ export const downloadByProduct = async (req, res) => {
  * GET /api/orders/:id/download — Download ZIP for paid order
  */
 export const downloadOrder = async (req, res) => {
-  // existing route still supported but now enforces user context and counters
   try {
     const { id } = req.params;
     const userId = req.user && req.user.id;
@@ -230,9 +231,10 @@ export const downloadOrder = async (req, res) => {
 
     const DOWNLOAD_EXPIRY_SECONDS = 600; // 10 minutes
     const downloadUrl = await storageService.getSignedDownloadUrl(order.products.zip_path, DOWNLOAD_EXPIRY_SECONDS);
+    
     // increment counter and log
     await orderService.incrementDownloads(order.id);
-    await adminService.logDownload({
+    await adminService.logDownload({ // ✅ NOW THIS WILL WORK
       user_email: req.user.email || "",
       user_name: req.user.name || "",
       product_id: order.product_id,
@@ -254,6 +256,7 @@ export const downloadOrder = async (req, res) => {
     const msg = String(error.message || "").toLowerCase();
     if (msg.includes("not found") || msg.includes("no such file")) {
       return sendError(res, "File not found in storage", 404, error.message);
-    }    return sendError(res, "Failed to generate download link", 500, error.message);
+    }
+    return sendError(res, "Failed to generate download link", 500, error.message);
   }
 };
