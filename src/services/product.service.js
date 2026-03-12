@@ -45,7 +45,7 @@ export const getAllProductsAdmin = async () => {
 /**
  * Create a new product (admin)
  */
-export const createProduct = async ({ title, description, price, zip_path, tags }) => {
+export const createProduct = async ({ title, description, price, zip_path, tags, thumbnail_url }) => {
   // build payload dynamically so we don't send 'tags' field if database doesn't have it
   const payload = {
     title,
@@ -55,6 +55,7 @@ export const createProduct = async ({ title, description, price, zip_path, tags 
     is_active: true,
   };
   if (tags !== undefined) payload.tags = tags;
+  if (thumbnail_url !== undefined) payload.thumbnail_url = thumbnail_url || "";
 
   const { data, error } = await supabase
     .from("products")
@@ -63,18 +64,23 @@ export const createProduct = async ({ title, description, price, zip_path, tags 
     .single();
 
   if (error) {
-    // if tags column missing, retry without it
+    // if column missing (tags or thumbnail_url), retry without it
     const msg = String(error.message || "");
-    if ((msg.includes("tags") || msg.includes("Could not find")) && payload.tags !== undefined) {
-      console.warn("createProduct: tags column missing, retrying without tags");
-      delete payload.tags;
-      const { data: d2, error: e2 } = await supabase
-        .from("products")
-        .insert([payload])
-        .select()
-        .single();
-      if (e2) throw new Error(e2.message);
-      return d2;
+    if (msg.includes("Could not find") || msg.includes("thumbnail_url") || msg.includes("tags") || msg.includes("42703")) {
+      const removedFields = [];
+      if (payload.tags !== undefined) { delete payload.tags; removedFields.push("tags"); }
+      if (payload.thumbnail_url !== undefined) { delete payload.thumbnail_url; removedFields.push("thumbnail_url"); }
+      
+      if (removedFields.length > 0) {
+        console.warn(`createProduct: column(s) [${removedFields.join(", ")}] missing, retrying without them`);
+        const { data: d2, error: e2 } = await supabase
+          .from("products")
+          .insert([payload])
+          .select()
+          .single();
+        if (e2) throw new Error(e2.message);
+        return d2;
+      }
     }
     throw new Error(error.message);
   }
@@ -86,7 +92,7 @@ export const createProduct = async ({ title, description, price, zip_path, tags 
  */
 export const updateProduct = async (id, updates) => {
   // Only allow specific fields to be updated
-  const allowedFields = ["title", "description", "price", "zip_path", "tags", "is_active"];
+  const allowedFields = ["title", "description", "price", "zip_path", "tags", "thumbnail_url", "is_active"];
   const cleanUpdates = {};
 
   for (const key of allowedFields) {
@@ -103,19 +109,24 @@ export const updateProduct = async (id, updates) => {
     .single();
 
   if (error) {
-    // if tags column missing, retry without it
+    // if column missing (tags or thumbnail_url), retry without it
     const msg = String(error.message || "");
-    if ((msg.includes("tags") || msg.includes("Could not find")) && cleanUpdates.tags !== undefined) {
-      console.warn("updateProduct: tags column missing, retrying without tags");
-      delete cleanUpdates.tags;
-      const { data: d2, error: e2 } = await supabase
-        .from("products")
-        .update(cleanUpdates)
-        .eq("id", id)
-        .select()
-        .single();
-      if (e2) throw new Error(e2.message);
-      return d2;
+    if (msg.includes("Could not find") || msg.includes("thumbnail_url") || msg.includes("tags") || msg.includes("42703")) {
+      const removedFields = [];
+      if (cleanUpdates.tags !== undefined) { delete cleanUpdates.tags; removedFields.push("tags"); }
+      if (cleanUpdates.thumbnail_url !== undefined) { delete cleanUpdates.thumbnail_url; removedFields.push("thumbnail_url"); }
+      
+      if (removedFields.length > 0) {
+        console.warn(`updateProduct: column(s) [${removedFields.join(", ")}] missing, retrying without them`);
+        const { data: d2, error: e2 } = await supabase
+          .from("products")
+          .update(cleanUpdates)
+          .eq("id", id)
+          .select()
+          .single();
+        if (e2) throw new Error(e2.message);
+        return d2;
+      }
     }
     throw new Error(error.message);
   }

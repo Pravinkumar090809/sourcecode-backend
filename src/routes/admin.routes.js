@@ -48,7 +48,7 @@ router.post("/upload", adminAuth, upload.single("file"), async (req, res) => {
  */
 router.post("/products/create-with-upload", adminAuth, upload.single("file"), async (req, res) => {
   try {
-    const { title, description, price, tags } = req.body;
+    const { title, description, price, tags, thumbnail_url } = req.body;
 
     if (!title || !price) {
       return sendError(res, "title and price are required", 400);
@@ -64,7 +64,7 @@ router.post("/products/create-with-upload", adminAuth, upload.single("file"), as
       await adminService.logActivity("File Uploaded", "Admin", `Uploaded ${req.file.originalname} with product "${title}"`, "file");
     }
 
-    const product = await productService.createProduct({ title, description, price, zip_path, tags });
+    const product = await productService.createProduct({ title, description, price, zip_path, tags, thumbnail_url });
     await adminService.logActivity("Product Created", "Admin", `Created product "${title}" (₹${price})`, "product");
 
     return sendSuccess(res, product, "Product created successfully", 201);

@@ -43,7 +43,7 @@ export const getProductsAdmin = async (req, res) => {
  */
 export const createProduct = async (req, res) => {
   try {
-    const { title, description, price, zip_path, tags } = req.body;
+    const { title, description, price, zip_path, tags, thumbnail_url } = req.body;
 
     if (!title || !price) {
       return sendError(res, "title and price are required", 400);
@@ -53,7 +53,7 @@ export const createProduct = async (req, res) => {
       return sendError(res, "price must be greater than 0", 400);
     }
 
-    const product = await productService.createProduct({ title, description, price, zip_path, tags });
+    const product = await productService.createProduct({ title, description, price, zip_path, tags, thumbnail_url });
     return sendSuccess(res, product, "Product created successfully", 201);
   } catch (error) {
     return sendError(res, "Failed to create product", 500, error.message);

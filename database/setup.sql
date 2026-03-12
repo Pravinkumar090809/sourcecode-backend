@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS products (
   description TEXT DEFAULT '',
   price INTEGER NOT NULL CHECK (price > 0),
   zip_path TEXT,
+  thumbnail_url TEXT DEFAULT '',
   tags TEXT DEFAULT '',
   is_active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now()

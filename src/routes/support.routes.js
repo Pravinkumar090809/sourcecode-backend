@@ -6,6 +6,9 @@ console.log("🔧 support.routes loaded");
 
 const router = express.Router();
 
+// public contact form (no auth required)
+router.post("/contact", supportController.publicContact);
+
 // user endpoints for support tickets
 router.post("/", userAuth, supportController.createTicket);
 router.get("/", userAuth, supportController.listTickets);

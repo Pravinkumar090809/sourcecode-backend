@@ -1,6 +1,36 @@
 import * as supportService from "../services/support.service.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 
+// Public contact form (no auth required)
+export const publicContact = async (req, res) => {
+  try {
+    const { name, email, subject, message } = req.body;
+
+    if (!name || !email || !message) {
+      return sendError(res, "Name, email, and message are required", 400);
+    }
+
+    // Simple email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return sendError(res, "Please provide a valid email address", 400);
+    }
+
+    const ticket = await supportService.createUserTicket({
+      user_name: name,
+      user_email: email,
+      subject: subject || "Contact Form Message",
+      message,
+      priority: "low",
+    });
+
+    return sendSuccess(res, { id: ticket.id }, "Message sent successfully! We'll get back to you within 24 hours.", 201);
+  } catch (error) {
+    console.error("❌ public contact error:", error.message);
+    return sendError(res, "Failed to send message. Please try again.", 500, error.message);
+  }
+};
+
 export const createTicket = async (req, res) => {
   try {
 const { subject, message, priority } = req.body;
