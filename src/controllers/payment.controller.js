@@ -5,6 +5,21 @@ import { getCouponByCode, incrementCouponUse } from "../services/admin.service.j
 import { sendSuccess, sendError } from "../utils/response.js";
 import { v4 as uuidv4 } from "uuid";
 
+const normalizeBaseUrl = (value) => {
+  if (!value || typeof value !== "string") return "";
+  return value.trim().replace(/\/+$/, "");
+};
+
+const isLocalhostLikeUrl = (value) => {
+  if (!value) return false;
+  try {
+    const parsed = new URL(value);
+    return ["localhost", "127.0.0.1", "0.0.0.0"].includes(parsed.hostname);
+  } catch {
+    return false;
+  }
+};
+
 /**
  * POST /api/payments/create — Initiate payment for a product
  *
@@ -71,9 +86,27 @@ export const createPayment = async (req, res) => {
       await incrementCouponUse(coupon.id);
     }
 
-    // Create Cashfree order (provide urls based on request in case env vars not set)
-    const backendBase = `${req.protocol}://${req.get("host")}`;
-    const returnUrl = `${process.env.FRONTEND_URL || backendBase}/payment/processing?order_id=${cashfreeOrderId}`;
+    // Create Cashfree order (safe URL resolution for local + production)
+    const forwardedProto = (req.get("x-forwarded-proto") || req.protocol || "https").split(",")[0].trim();
+    const forwardedHost = (req.get("x-forwarded-host") || req.get("host") || "").split(",")[0].trim();
+
+    const envBackendBase = normalizeBaseUrl(process.env.BACKEND_URL);
+    const fallbackBackendBase = forwardedHost ? `${forwardedProto}://${forwardedHost}` : "";
+    const backendBase = envBackendBase || fallbackBackendBase;
+
+    const envFrontendBase = normalizeBaseUrl(process.env.FRONTEND_URL);
+    const requestOrigin = normalizeBaseUrl(req.get("origin"));
+    const runningInProd = process.env.NODE_ENV === "production";
+
+    let frontendBase = envFrontendBase || requestOrigin || backendBase;
+
+    // Prevent accidental localhost redirect in production
+    if (runningInProd && isLocalhostLikeUrl(frontendBase)) {
+      const candidate = requestOrigin && !isLocalhostLikeUrl(requestOrigin) ? requestOrigin : backendBase;
+      if (candidate) frontendBase = candidate;
+    }
+
+    const returnUrl = `${frontendBase}/payment/processing?order_id=${cashfreeOrderId}`;
     const notifyUrl = `${backendBase}/api/payments/webhook`;
 
     console.log("🔧 URLs for cashfree:", { backendBase, returnUrl, notifyUrl, front: process.env.FRONTEND_URL, backEnv: process.env.BACKEND_URL });
