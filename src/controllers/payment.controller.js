@@ -69,14 +69,29 @@ export const createPayment = async (req, res) => {
     });
 
     if (coupon) {
-      await incrementCouponUse(coupon.id);
+      try {
+        await incrementCouponUse(coupon.id);
+      } catch (e) {
+        console.warn("incrementCouponUse failed:", e.message);
+      }
     }
 
-    const paymentSettings = await getSettings("payment_");
+    let paymentSettings = {};
+    try {
+      paymentSettings = await getSettings("payment_");
+    } catch (e) {
+      console.warn("getSettings(payment_) failed:", e.message);
+      paymentSettings = {};
+    }
     const qrImagePath = paymentSettings.payment_qr_image_path || "";
     let qrCodeUrl = paymentSettings.payment_qr_code_url || "";
     if (!qrCodeUrl && qrImagePath) {
-      qrCodeUrl = await storageService.getSignedFileUrl(qrImagePath, 24 * 60 * 60);
+      try {
+        qrCodeUrl = await storageService.getSignedFileUrl(qrImagePath, 24 * 60 * 60);
+      } catch (e) {
+        console.warn("QR signed URL generation failed:", e.message);
+        qrCodeUrl = "";
+      }
     }
     const upiId = paymentSettings.payment_upi_id || "";
     const paymentInstructions =
@@ -138,14 +153,30 @@ export const verifyPayment = async (req, res) => {
       return sendError(res, "Order not found", 404);
     }
 
-    const paymentSettings = await getSettings("payment_");
+    let paymentSettings = {};
+    try {
+      paymentSettings = await getSettings("payment_");
+    } catch (e) {
+      console.warn("getSettings(payment_) failed in verify:", e.message);
+      paymentSettings = {};
+    }
     const qrImagePath = paymentSettings.payment_qr_image_path || "";
     let resolvedQrUrl = order.qr_code_url || paymentSettings.payment_qr_code_url || "";
     if (resolvedQrUrl && !/^https?:\/\//i.test(resolvedQrUrl)) {
-      resolvedQrUrl = await storageService.getSignedFileUrl(resolvedQrUrl, 24 * 60 * 60);
+      try {
+        resolvedQrUrl = await storageService.getSignedFileUrl(resolvedQrUrl, 24 * 60 * 60);
+      } catch (e) {
+        console.warn("Order QR signed URL failed:", e.message);
+        resolvedQrUrl = "";
+      }
     }
     if (!resolvedQrUrl && qrImagePath) {
-      resolvedQrUrl = await storageService.getSignedFileUrl(qrImagePath, 24 * 60 * 60);
+      try {
+        resolvedQrUrl = await storageService.getSignedFileUrl(qrImagePath, 24 * 60 * 60);
+      } catch (e) {
+        console.warn("Settings QR signed URL failed:", e.message);
+        resolvedQrUrl = "";
+      }
     }
 
     return sendSuccess(res, {
