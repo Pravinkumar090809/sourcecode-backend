@@ -2,6 +2,7 @@ import * as orderService from "../services/order.service.js";
 import * as storageService from "../services/storage.service.js";
 import * as productService from "../services/product.service.js";
 import * as adminService from "../services/admin.service.js"; // ✅ ADD THIS
+import { sendDownloadLinkEmail } from "../services/email.service.js";
 import { getCouponByCode, incrementCouponUse } from "../services/admin.service.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 
@@ -119,6 +120,73 @@ export const getOrderStats = async (req, res) => {
   } catch (error) {
     console.error("💥 getOrderStats error:", error.message);
     return sendError(res, "Failed to fetch stats", 500, error.message);
+  }
+};
+
+/**
+ * PATCH /api/orders/admin/:id/payment-review
+ * Admin approves or rejects manual payment submission
+ */
+export const reviewOrderPayment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action, admin_note, rejection_reason, approved_amount } = req.body;
+
+    if (!id || !action) {
+      return sendError(res, "Order id and action are required", 400);
+    }
+
+    const updated = await orderService.reviewManualPayment(id, {
+      action,
+      admin_note,
+      rejection_reason,
+      approved_amount,
+    });
+
+    if (String(action).toLowerCase().startsWith("approve")) {
+      try {
+        const order = await orderService.getOrderById(id);
+        const zipPath = order?.products?.zip_path;
+        const toEmail = order?.buyer_email;
+
+        if (zipPath && toEmail) {
+          const settings = await adminService.getSettings();
+          const expiryHours = Math.max(Number(settings.download_expiry || 24), 1);
+          const expiresInSeconds = expiryHours * 60 * 60;
+          const downloadUrl = await storageService.getSignedDownloadUrl(zipPath, expiresInSeconds);
+
+          await sendDownloadLinkEmail({
+            to: toEmail,
+            customerName: order?.customer_name || "Customer",
+            productTitle: order?.products?.title || "Product",
+            orderId: order?.cashfree_order_id || order?.id,
+            downloadUrl,
+            expiresInHours: expiryHours,
+          });
+
+          await adminService.logActivity(
+            "Download Link Email Sent",
+            "System",
+            `Order ${id} email sent to ${toEmail}`,
+            "email"
+          );
+        }
+      } catch (mailErr) {
+        console.warn("Could not send download link email:", mailErr.message);
+      }
+    }
+
+    await adminService.logActivity(
+      "Manual Payment Reviewed",
+      "Admin",
+      `Order ${id}: ${String(action).toLowerCase()}`,
+      "payment"
+    );
+
+    return sendSuccess(res, updated, "Order payment status updated");
+  } catch (error) {
+    console.error("💥 reviewOrderPayment error:", error.message);
+    return sendError(res, "Failed to review payment", 500, error.message);
   }
 };
 

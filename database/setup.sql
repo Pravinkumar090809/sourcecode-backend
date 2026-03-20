@@ -37,10 +37,34 @@ CREATE TABLE IF NOT EXISTS orders (
   buyer_email TEXT NOT NULL,
   payment_status TEXT DEFAULT 'PENDING' CHECK (payment_status IN ('PENDING', 'PAID', 'FAILED')),
   cashfree_order_id TEXT UNIQUE,
+  payment_method TEXT DEFAULT 'QR_MANUAL',
+  verification_status TEXT DEFAULT 'PENDING',
+  utr_number TEXT,
+  transaction_id TEXT,
+  paid_amount NUMERIC(10,2),
+  payment_note TEXT,
+  admin_note TEXT,
+  rejection_reason TEXT,
+  qr_code_url TEXT,
+  verification_submitted_at TIMESTAMPTZ,
+  verification_reviewed_at TIMESTAMPTZ,
   downloads_used INTEGER DEFAULT 0 NOT NULL,
   max_downloads INTEGER DEFAULT 1 NOT NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+-- Backward-compatible alters for existing installations
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_method TEXT DEFAULT 'QR_MANUAL';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT 'PENDING';
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS utr_number TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS transaction_id TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(10,2);
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_note TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS admin_note TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS qr_code_url TEXT;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS verification_submitted_at TIMESTAMPTZ;
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS verification_reviewed_at TIMESTAMPTZ;
 
 -- ─── Admins Table (optional) ───
 CREATE TABLE IF NOT EXISTS admins (

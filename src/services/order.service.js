@@ -14,10 +14,66 @@ const isUserFKError = (msg) =>
 // convert status fields to lowercase so front-end comparisons are case-insensitive
 const normalizeOrder = (o) => {
   if (!o) return o;
+  const product = o.products || o.product || null;
+  const status = o.payment_status ? String(o.payment_status).toLowerCase() : o.payment_status;
+  const verificationStatusRaw = o.verification_status
+    ? String(o.verification_status).toLowerCase()
+    : null;
+
+  const derivedVerificationStatus =
+    verificationStatusRaw ||
+    (status === "paid" ? "approved" : status === "failed" ? "rejected" : "pending");
+
+  const price = Number(product?.price || o.price || 0);
+  const discount = Number(o.discount_amount || 0);
+  const derivedAmount = Math.max(price - discount, 0);
+
   return {
     ...o,
-    payment_status: o.payment_status ? String(o.payment_status).toLowerCase() : o.payment_status,
+    payment_status: status,
+    verification_status: derivedVerificationStatus,
+    email: o.email || o.buyer_email || "",
+    customer_name: o.customer_name || o.buyer_name || "Customer",
+    product_title: o.product_title || product?.title || "",
+    amount: o.amount ?? o.paid_amount ?? derivedAmount,
+    transaction_id: o.transaction_id || null,
+    utr_number: o.utr_number || null,
   };
+};
+
+const updateOrderWithFallback = async (id, updates, select = "*, products(*)") => {
+  const payload = { ...updates };
+  const keys = Object.keys(payload);
+
+  if (keys.length === 0) {
+    return getOrderById(id);
+  }
+
+  for (let i = 0; i < keys.length + 1; i++) {
+    const { data, error } = await supabase
+      .from("orders")
+      .update(payload)
+      .eq("id", id)
+      .select(select)
+      .single();
+
+    if (!error) return normalizeOrder(data);
+
+    const msg = String(error.message || "");
+    if (!isColumnError(msg)) {
+      throw new Error(msg);
+    }
+
+    const removableKey = Object.keys(payload).find((key) => msg.includes(key));
+    if (!removableKey) {
+      throw new Error(msg);
+    }
+
+    console.warn(`updateOrderWithFallback: dropping missing column ${removableKey}`);
+    delete payload[removableKey];
+  }
+
+  return getOrderById(id);
 };
 
 
@@ -175,6 +231,25 @@ export const getOrderByCashfreeId = async (cashfree_order_id) => {
 };
 
 /**
+ * Get order by reference (cashfree_order_id OR UUID id)
+ */
+export const getOrderByRef = async (orderRef) => {
+  if (!orderRef) return null;
+
+  try {
+    return await getOrderByCashfreeId(orderRef);
+  } catch (_) {
+    // fallback to UUID id
+  }
+
+  try {
+    return await getOrderById(orderRef);
+  } catch (_) {
+    return null;
+  }
+};
+
+/**
  * Fetch a paid order belonging to a user for a specific product.
  * Falls back to buyer_email lookup when user_id column is missing.
  * Returns null if not found.
@@ -291,6 +366,13 @@ export const updateOrderStatus = async (id, payment_status) => {
 };
 
 /**
+ * Update order payment metadata (handles missing columns safely)
+ */
+export const updateOrderPaymentMeta = async (id, updates = {}) => {
+  return updateOrderWithFallback(id, updates);
+};
+
+/**
  * Update order status by Cashfree order ID
  */
 export const updateOrderStatusByCashfreeId = async (cashfree_order_id, payment_status) => {
@@ -303,6 +385,64 @@ export const updateOrderStatusByCashfreeId = async (cashfree_order_id, payment_s
 
   if (error) throw new Error(error.message);
   return normalizeOrder(data);
+};
+
+/**
+ * Submit manual payment proof (UTR + amount)
+ */
+export const submitManualPaymentProof = async (
+  orderRef,
+  { utr_number, transaction_id, paid_amount, payment_note = null }
+) => {
+  const order = await getOrderByRef(orderRef);
+  if (!order) throw new Error("Order not found");
+
+  const now = new Date().toISOString();
+  const updates = {
+    utr_number,
+    transaction_id,
+    paid_amount,
+    payment_note,
+    payment_method: "QR_MANUAL",
+    verification_status: "SUBMITTED",
+    verification_submitted_at: now,
+    payment_status: "PENDING",
+  };
+
+  return updateOrderWithFallback(order.id, updates);
+};
+
+/**
+ * Admin review for manual payment
+ */
+export const reviewManualPayment = async (
+  id,
+  { action, admin_note = null, rejection_reason = null, approved_amount = null }
+) => {
+  const normalized = String(action || "").toLowerCase();
+  if (!["approve", "approved", "reject", "rejected"].includes(normalized)) {
+    throw new Error("Invalid action");
+  }
+
+  const isApprove = normalized.startsWith("approve");
+  const now = new Date().toISOString();
+
+  const updates = {
+    payment_status: isApprove ? "PAID" : "FAILED",
+    verification_status: isApprove ? "APPROVED" : "REJECTED",
+    verification_reviewed_at: now,
+    admin_note,
+  };
+
+  if (isApprove && approved_amount != null) {
+    updates.paid_amount = approved_amount;
+  }
+
+  if (!isApprove) {
+    updates.rejection_reason = rejection_reason || admin_note || "Payment rejected by admin";
+  }
+
+  return updateOrderWithFallback(id, updates);
 };
 
 /**

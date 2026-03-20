@@ -1,6 +1,6 @@
 import express from "express";
 import * as paymentController from "../controllers/payment.controller.js";
-import { userAuth } from "../middlewares/auth.middleware.js";
+import { adminAuth } from "../middlewares/admin.middleware.js";
 
 const router = express.Router();
 
@@ -17,6 +17,22 @@ router.post("/create", paymentController.createPayment);
  * @access  Public
  */
 router.get("/verify/:cashfreeOrderId", paymentController.verifyPayment);
+
+/**
+ * @route   POST /api/payments/submit-proof
+ * @desc    Submit UTR and amount for manual verification
+ * @access  Public
+ */
+router.post("/submit-proof", paymentController.submitManualProof);
+router.post("/proof/submit", paymentController.submitManualProof);
+router.post("/submit", paymentController.submitManualProof);
+
+/**
+ * @route   PATCH /api/payments/admin/review/:orderId
+ * @desc    Admin approve/reject manual payment
+ * @access  Admin
+ */
+router.patch("/admin/review/:orderId", adminAuth, paymentController.reviewManualPayment);
 
 /**
  * @route   POST /api/payments/webhook

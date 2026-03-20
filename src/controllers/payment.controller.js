@@ -1,24 +1,10 @@
 import * as paymentService from "../services/payment.service.js";
 import * as orderService from "../services/order.service.js";
 import * as productService from "../services/product.service.js";
-import { getCouponByCode, incrementCouponUse } from "../services/admin.service.js";
+import * as storageService from "../services/storage.service.js";
+import { getCouponByCode, incrementCouponUse, getSettings, logActivity } from "../services/admin.service.js";
 import { sendSuccess, sendError } from "../utils/response.js";
 import { v4 as uuidv4 } from "uuid";
-
-const normalizeBaseUrl = (value) => {
-  if (!value || typeof value !== "string") return "";
-  return value.trim().replace(/\/+$/, "");
-};
-
-const isLocalhostLikeUrl = (value) => {
-  if (!value) return false;
-  try {
-    const parsed = new URL(value);
-    return ["localhost", "127.0.0.1", "0.0.0.0"].includes(parsed.hostname);
-  } catch {
-    return false;
-  }
-};
 
 /**
  * POST /api/payments/create — Initiate payment for a product
@@ -31,7 +17,7 @@ const isLocalhostLikeUrl = (value) => {
  */
 export const createPayment = async (req, res) => {
   try {
-    const { product_id, buyer_email, buyer_name, buyer_phone, coupon_code } = req.body;
+    const { product_id, buyer_email, coupon_code } = req.body;
 
     if (!product_id || !buyer_email) {
       return sendError(res, "product_id and buyer_email are required", 400);
@@ -69,8 +55,8 @@ export const createPayment = async (req, res) => {
       if (discount > product.price) discount = product.price;
     }
 
-    // Generate unique order ID for Cashfree
-    const cashfreeOrderId = `CF_${Date.now()}_${uuidv4().slice(0, 8)}`;
+    // Generate unique public reference for manual QR payment
+    const cashfreeOrderId = `QR_${Date.now()}_${uuidv4().slice(0, 8)}`;
 
     // Create order in DB
     console.log('creating order with coupon', coupon_code, 'discount', discount);
@@ -86,38 +72,28 @@ export const createPayment = async (req, res) => {
       await incrementCouponUse(coupon.id);
     }
 
-    // Create Cashfree order (safe URL resolution for local + production)
-    const forwardedProto = (req.get("x-forwarded-proto") || req.protocol || "https").split(",")[0].trim();
-    const forwardedHost = (req.get("x-forwarded-host") || req.get("host") || "").split(",")[0].trim();
+    const paymentSettings = await getSettings("payment_");
+    const qrImagePath = paymentSettings.payment_qr_image_path || "";
+    let qrCodeUrl = paymentSettings.payment_qr_code_url || "";
+    if (!qrCodeUrl && qrImagePath) {
+      qrCodeUrl = await storageService.getSignedFileUrl(qrImagePath, 24 * 60 * 60);
+    }
+    const upiId = paymentSettings.payment_upi_id || "";
+    const paymentInstructions =
+      paymentSettings.payment_instructions ||
+      "QR scan करके payment करें और UTR number submit करें. Payment admin verify होने के बाद approve होगा.";
 
-    const envBackendBase = normalizeBaseUrl(process.env.BACKEND_URL);
-    const fallbackBackendBase = forwardedHost ? `${forwardedProto}://${forwardedHost}` : "";
-    const backendBase = envBackendBase || fallbackBackendBase;
-
-    const envFrontendBase = normalizeBaseUrl(process.env.FRONTEND_URL);
-    const requestOrigin = normalizeBaseUrl(req.get("origin"));
-    const runningInProd = process.env.NODE_ENV === "production";
-
-    let frontendBase = envFrontendBase || requestOrigin || backendBase;
-
-    // Prevent accidental localhost redirect in production
-    if (runningInProd && isLocalhostLikeUrl(frontendBase)) {
-      const candidate = requestOrigin && !isLocalhostLikeUrl(requestOrigin) ? requestOrigin : backendBase;
-      if (candidate) frontendBase = candidate;
+    if (!qrCodeUrl && !upiId) {
+      return sendError(res, "Payment QR/UPI is not configured by admin", 400);
     }
 
-    const returnUrl = `${frontendBase}/payment/processing?order_id=${cashfreeOrderId}`;
-    const notifyUrl = `${backendBase}/api/payments/webhook`;
+    const amountToPay = Math.max((product.price || 0) - discount, 0);
 
-    console.log("🔧 URLs for cashfree:", { backendBase, returnUrl, notifyUrl, front: process.env.FRONTEND_URL, backEnv: process.env.BACKEND_URL });
-
-    const cashfreeOrder = await paymentService.createCashfreeOrder({
-      orderId: cashfreeOrderId,
-      amount: product.price - discount,
-      customerEmail: buyer_email,
-      customerPhone: buyer_phone,
-      customerName: buyer_name,
-      urls: { returnUrl, notifyUrl },
+    await orderService.updateOrderPaymentMeta(order.id, {
+      payment_method: "QR_MANUAL",
+      paid_amount: amountToPay,
+      qr_code_url: qrImagePath || qrCodeUrl || null,
+      verification_status: "PENDING",
     });
 
     return sendSuccess(
@@ -125,13 +101,18 @@ export const createPayment = async (req, res) => {
       {
         order_id: order.id,
         cashfree_order_id: cashfreeOrderId,
-        payment_session_id: cashfreeOrder.payment_session_id,
-        payment_link: cashfreeOrder.payment_link,
-        order_status: cashfreeOrder.order_status,
-        amount: product.price,
+        payment_session_id: null,
+        payment_link: null,
+        order_status: "PENDING",
+        payment_status: "pending",
+        verification_status: "pending",
+        amount: amountToPay,
         product_name: product.name,
+        qr_code_url: qrCodeUrl,
+        upi_id: upiId,
+        payment_instructions: paymentInstructions,
       },
-      "Payment initiated successfully",
+      "QR payment initiated successfully",
       201
     );
   } catch (error) {
@@ -151,30 +132,37 @@ export const verifyPayment = async (req, res) => {
       return sendError(res, "cashfreeOrderId is required", 400);
     }
 
-    // Verify with Cashfree
-    const cashfreeStatus = await paymentService.verifyCashfreePayment(cashfreeOrderId);
-
-    // Map status
-    let paymentStatus = "PENDING";
-    if (cashfreeStatus.order_status === "PAID") {
-      paymentStatus = "PAID";
-    } else if (["EXPIRED", "CANCELLED", "TERMINATED"].includes(cashfreeStatus.order_status)) {
-      paymentStatus = "FAILED";
+    const order = await orderService.getOrderByRef(cashfreeOrderId);
+    if (!order) {
+      return sendError(res, "Order not found", 404);
     }
 
-    // Update our DB
-    const order = await orderService.updateOrderStatusByCashfreeId(
-      cashfreeOrderId,
-      paymentStatus
-    );
+    const paymentSettings = await getSettings("payment_");
+    const qrImagePath = paymentSettings.payment_qr_image_path || "";
+    let resolvedQrUrl = order.qr_code_url || paymentSettings.payment_qr_code_url || "";
+    if (resolvedQrUrl && !/^https?:\/\//i.test(resolvedQrUrl)) {
+      resolvedQrUrl = await storageService.getSignedFileUrl(resolvedQrUrl, 24 * 60 * 60);
+    }
+    if (!resolvedQrUrl && qrImagePath) {
+      resolvedQrUrl = await storageService.getSignedFileUrl(qrImagePath, 24 * 60 * 60);
+    }
 
     return sendSuccess(res, {
       order_id: order.id,
       cashfree_order_id: cashfreeOrderId,
-      payment_status: paymentStatus,
-      cashfree_status: cashfreeStatus.order_status,
-      order_amount: cashfreeStatus.order_amount,
-      product: order.product,
+      payment_status: order.payment_status,
+      verification_status: order.verification_status,
+      cashfree_status: order.payment_status,
+      order_amount: order.amount,
+      paid_amount: order.paid_amount,
+      utr_number: order.utr_number,
+      transaction_id: order.transaction_id || null,
+      payment_note: order.payment_note || null,
+      rejection_reason: order.rejection_reason || null,
+      qr_code_url: resolvedQrUrl,
+      upi_id: paymentSettings.payment_upi_id || "",
+      payment_instructions: paymentSettings.payment_instructions || "",
+      product: order.products || order.product || null,
     }, "Payment status verified");
   } catch (error) {
     console.error("❌ Verify payment error:", error.message);
@@ -228,7 +216,7 @@ export const getOrderDetails = async (req, res) => {
   try {
     const { orderId } = req.params;
 
-    const order = await orderService.getOrderById(orderId);
+    const order = await orderService.getOrderByRef(orderId);
 
     if (!order) {
       return sendError(res, "Order not found", 404);
@@ -238,6 +226,82 @@ export const getOrderDetails = async (req, res) => {
   } catch (error) {
     console.error("❌ Get order error:", error.message);
     return sendError(res, "Failed to fetch order", 500, error.message);
+  }
+};
+
+/**
+ * POST /api/payments/submit-proof — submit UTR + amount for manual verification
+ */
+export const submitManualProof = async (req, res) => {
+  try {
+    const { order_ref, utr_number, transaction_id, paid_amount, payment_note } = req.body;
+
+    if (!order_ref || !utr_number || !transaction_id || paid_amount == null) {
+      return sendError(res, "order_ref, utr_number, transaction_id and paid_amount are required", 400);
+    }
+
+    const amount = Number(paid_amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return sendError(res, "paid_amount must be a valid positive number", 400);
+    }
+
+    const utr = String(utr_number).trim();
+    const txn = String(transaction_id).trim();
+    if (!/^[a-zA-Z0-9]{6,30}$/.test(utr)) {
+      return sendError(res, "Invalid UTR number format", 400);
+    }
+    if (!/^[a-zA-Z0-9_-]{6,40}$/.test(txn)) {
+      return sendError(res, "Invalid transaction_id format", 400);
+    }
+
+    const updated = await orderService.submitManualPaymentProof(order_ref, {
+      utr_number: utr,
+      transaction_id: txn,
+      paid_amount: amount,
+      payment_note: payment_note || null,
+    });
+
+    return sendSuccess(
+      res,
+      updated,
+      "Payment details submitted successfully. Admin verification pending."
+    );
+  } catch (error) {
+    console.error("❌ Submit payment proof error:", error.message);
+    return sendError(res, "Failed to submit payment proof", 500, error.message);
+  }
+};
+
+/**
+ * PATCH /api/payments/admin/review/:orderId — approve or reject manual payment
+ */
+export const reviewManualPayment = async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    const { action, admin_note, rejection_reason, approved_amount } = req.body;
+
+    if (!orderId || !action) {
+      return sendError(res, "orderId and action are required", 400);
+    }
+
+    const updated = await orderService.reviewManualPayment(orderId, {
+      action,
+      admin_note,
+      rejection_reason,
+      approved_amount,
+    });
+
+    await logActivity(
+      "Payment Reviewed",
+      "Admin",
+      `Order ${orderId} ${String(action).toLowerCase()}`,
+      "payment"
+    );
+
+    return sendSuccess(res, updated, `Payment ${String(action).toLowerCase()} successfully`);
+  } catch (error) {
+    console.error("❌ Review manual payment error:", error.message);
+    return sendError(res, "Failed to review payment", 500, error.message);
   }
 };
 

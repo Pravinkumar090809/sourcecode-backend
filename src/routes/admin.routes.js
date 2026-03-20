@@ -22,6 +22,18 @@ const upload = multer({
   },
 });
 
+const qrUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only PNG/JPG/WEBP images are allowed"), false);
+    }
+  },
+});
+
 // ─── Admin Routes ───
 
 /**
@@ -38,6 +50,47 @@ router.post("/upload", adminAuth, upload.single("file"), async (req, res) => {
     return sendSuccess(res, { zip_path: result.path }, "File uploaded successfully", 201);
   } catch (error) {
     return sendError(res, "Upload failed", 500, error.message);
+  }
+});
+
+/**
+ * POST /api/admin/payments/qr/upload
+ * Upload QR image and save path in settings
+ */
+router.post("/payments/qr/upload", adminAuth, qrUpload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return sendError(res, "No image uploaded", 400);
+    }
+
+    const uploaded = await storageService.uploadQrImageFile(
+      req.file.buffer,
+      req.file.originalname,
+      req.file.mimetype
+    );
+
+    await adminService.updateSettings({
+      payment_qr_image_path: uploaded.path,
+      payment_qr_code_url: "",
+    });
+
+    const previewUrl = await storageService.getSignedFileUrl(uploaded.path, 24 * 60 * 60);
+
+    await adminService.logActivity(
+      "Payment QR Uploaded",
+      "Admin",
+      `Uploaded QR image ${req.file.originalname}`,
+      "payment"
+    );
+
+    return sendSuccess(
+      res,
+      { qr_image_path: uploaded.path, qr_code_url: previewUrl },
+      "QR image uploaded successfully",
+      201
+    );
+  } catch (error) {
+    return sendError(res, "Failed to upload QR image", 500, error.message);
   }
 });
 

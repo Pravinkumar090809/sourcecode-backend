@@ -43,6 +43,36 @@ export const getSignedDownloadUrl = async (zipPath, expiresIn = 600) => {
 };
 
 /**
+ * Generate signed URL for any file path in source-codes bucket
+ */
+export const getSignedFileUrl = async (filePath, expiresIn = 3600) => {
+  const { data, error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .createSignedUrl(filePath, expiresIn);
+
+  if (error) throw new Error(`Signed URL failed: ${error.message}`);
+  return data.signedUrl;
+};
+
+/**
+ * Upload QR image file to storage
+ */
+export const uploadQrImageFile = async (fileBuffer, fileName, mimetype = "image/png") => {
+  const safeName = fileName.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const filePath = `qrs/${Date.now()}_${safeName}`;
+
+  const { data, error } = await supabase.storage
+    .from(BUCKET_NAME)
+    .upload(filePath, fileBuffer, {
+      contentType: mimetype,
+      upsert: false,
+    });
+
+  if (error) throw new Error(`QR upload failed: ${error.message}`);
+  return { path: data.path };
+};
+
+/**
  * Delete a file from storage
  * @param {string} zipPath - path inside bucket
  */

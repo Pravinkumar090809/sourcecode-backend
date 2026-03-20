@@ -8,6 +8,7 @@ const router = express.Router();
 // ─── Admin Routes (must come before /:id to avoid route conflict) ───
 router.get("/admin/all", adminAuth, orderController.getAllOrders);         // All orders
 router.get("/admin/stats", adminAuth, orderController.getOrderStats);     // Stats
+router.patch("/admin/:id/payment-review", adminAuth, orderController.reviewOrderPayment); // Approve/Reject payment
 
 // ─── Authenticated Routes (require logged-in user) ───
 router.post("/", userAuth, orderController.createOrder);                    // Create order
