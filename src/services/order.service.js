@@ -269,11 +269,14 @@ export const getPaidOrderForUserProduct = async (user_id, product_id, buyer_emai
       .select("*, products(*)")
       .eq("user_id", user_id)
       .eq("product_id", product_id)
-      .eq("payment_status", "PAID")
+      .in("payment_status", ["PAID", "paid"])
+      .order("created_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
 
     if (error) throw new Error(error.message);
-    return normalizeOrder(data);
+    // if found by user_id, return immediately; otherwise fallback to buyer_email
+    if (data) return normalizeOrder(data);
   } catch (err) {
     const msg = String(err.message || "");
     if (!msg.includes("user_id") && !msg.includes("Could not find")) throw err;
@@ -285,9 +288,11 @@ export const getPaidOrderForUserProduct = async (user_id, product_id, buyer_emai
   const { data, error } = await supabase
     .from("orders")
     .select("*, products(*)")
-    .eq("buyer_email", buyer_email)
+    .ilike("buyer_email", buyer_email)
     .eq("product_id", product_id)
-    .eq("payment_status", "PAID")
+    .in("payment_status", ["PAID", "paid"])
+    .order("created_at", { ascending: false })
+    .limit(1)
     .maybeSingle();
 
   if (error) throw new Error(error.message);
