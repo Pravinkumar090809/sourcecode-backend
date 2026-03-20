@@ -446,6 +446,15 @@ export const reviewManualPayment = async (
 };
 
 /**
+ * Delete order by id (admin)
+ */
+export const deleteOrderById = async (id) => {
+  const { error } = await supabase.from("orders").delete().eq("id", id);
+  if (error) throw new Error(error.message);
+  return true;
+};
+
+/**
  * Get order stats (admin dashboard)
  */
 export const getOrderStats = async () => {

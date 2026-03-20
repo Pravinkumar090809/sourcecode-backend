@@ -191,6 +191,25 @@ export const reviewOrderPayment = async (req, res) => {
 };
 
 /**
+ * DELETE /api/orders/admin/:id
+ * Delete order (admin)
+ */
+export const deleteOrder = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id) return sendError(res, "Order id is required", 400);
+
+    await orderService.deleteOrderById(id);
+    await adminService.logActivity("Order Deleted", "Admin", `Deleted order ${id}`, "order");
+
+    return sendSuccess(res, null, "Order deleted successfully");
+  } catch (error) {
+    console.error("💥 deleteOrder error:", error.message);
+    return sendError(res, "Failed to delete order", 500, error.message);
+  }
+};
+
+/**
  * GET /api/download?productId=<id>
  * used by frontend to request download from Supabase for a specific product
  */

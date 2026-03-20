@@ -9,6 +9,7 @@ const router = express.Router();
 router.get("/admin/all", adminAuth, orderController.getAllOrders);         // All orders
 router.get("/admin/stats", adminAuth, orderController.getOrderStats);     // Stats
 router.patch("/admin/:id/payment-review", adminAuth, orderController.reviewOrderPayment); // Approve/Reject payment
+router.delete("/admin/:id", adminAuth, orderController.deleteOrder);      // Delete order
 
 // ─── Authenticated Routes (require logged-in user) ───
 router.post("/", userAuth, orderController.createOrder);                    // Create order

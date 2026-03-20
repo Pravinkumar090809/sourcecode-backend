@@ -83,9 +83,7 @@ export const createPayment = async (req, res) => {
       paymentSettings.payment_instructions ||
       "QR scan करके payment करें और UTR number submit करें. Payment admin verify होने के बाद approve होगा.";
 
-    if (!qrCodeUrl && !upiId) {
-      return sendError(res, "Payment QR/UPI is not configured by admin", 400);
-    }
+    const setupMissing = !qrCodeUrl && !upiId;
 
     const amountToPay = Math.max((product.price || 0) - discount, 0);
 
@@ -111,8 +109,11 @@ export const createPayment = async (req, res) => {
         qr_code_url: qrCodeUrl,
         upi_id: upiId,
         payment_instructions: paymentInstructions,
+        setup_missing: setupMissing,
       },
-      "QR payment initiated successfully",
+      setupMissing
+        ? "Payment initiated. QR/UPI setup pending by admin. Please contact support."
+        : "QR payment initiated successfully",
       201
     );
   } catch (error) {
