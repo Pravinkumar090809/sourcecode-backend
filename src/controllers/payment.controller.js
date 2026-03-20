@@ -102,12 +102,16 @@ export const createPayment = async (req, res) => {
 
     const amountToPay = Math.max((product.price || 0) - discount, 0);
 
-    await orderService.updateOrderPaymentMeta(order.id, {
-      payment_method: "QR_MANUAL",
-      paid_amount: amountToPay,
-      qr_code_url: qrImagePath || qrCodeUrl || null,
-      verification_status: "PENDING",
-    });
+    try {
+      await orderService.updateOrderPaymentMeta(order.id, {
+        payment_method: "QR_MANUAL",
+        paid_amount: amountToPay,
+        qr_code_url: qrImagePath || qrCodeUrl || null,
+        verification_status: "PENDING",
+      });
+    } catch (e) {
+      console.warn("updateOrderPaymentMeta failed (continuing):", e.message);
+    }
 
     return sendSuccess(
       res,

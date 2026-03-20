@@ -43,21 +43,28 @@ const normalizeOrder = (o) => {
 
 const updateOrderWithFallback = async (id, updates, select = "*, products(*)") => {
   const payload = { ...updates };
-  const keys = Object.keys(payload);
+  const maxAttempts = Object.keys(payload).length + 1;
 
-  if (keys.length === 0) {
+  if (Object.keys(payload).length === 0) {
     return getOrderById(id);
   }
 
-  for (let i = 0; i < keys.length + 1; i++) {
+  for (let i = 0; i < maxAttempts; i++) {
+    if (Object.keys(payload).length === 0) {
+      return getOrderById(id);
+    }
+
     const { data, error } = await supabase
       .from("orders")
       .update(payload)
       .eq("id", id)
       .select(select)
-      .single();
+      .maybeSingle();
 
-    if (!error) return normalizeOrder(data);
+    if (!error) {
+      if (data) return normalizeOrder(data);
+      return getOrderById(id);
+    }
 
     const msg = String(error.message || "");
     if (!isColumnError(msg)) {
